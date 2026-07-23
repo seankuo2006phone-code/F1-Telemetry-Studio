@@ -5,7 +5,8 @@ import fastf1
 import pandas as pd
 from huggingface_hub import HfApi, list_repo_files
 
-REPO_ID = "SeanKuo2006/F1-Telemetry-Data"
+# ⚠️ 注意：如果你剛才有新建一個 Repository (例如結尾加了 -V2)，請記得改這裡！
+REPO_ID = "SeanKuo2006/F1-Telemetry-Data-V2" 
 LOCAL_CACHE_DIR = "./f1_cache"
 LOCAL_DATA_DIR = "./F1 data"
 
@@ -25,6 +26,13 @@ SESSION_MAPPING = {
 
 YEARS = range(2018, 2026)
 
+# 確保只保留能畫出遙測圖表的關鍵欄位
+cols_to_keep = [
+    "Driver", "Team", "Distance", "Speed",
+    "Throttle", "Brake", "RPM",
+    "X", "Y", "DRS", "Sector"
+]
+
 def prevent_computer_sleep():
     """🛡️ 告訴 Windows 保持清醒（防止系統進入睡眠與關閉電源）"""
     ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)
@@ -33,7 +41,7 @@ def rebuild_f1_dataset():
     api = HfApi()
     token = os.environ.get("HF_TOKEN")
     
-    print("🚀 啟動無情抓取程式（已移除所有冷卻限制，暴力連線版）...")
+    print("🚀 啟動無情抓取程式（防睡眠 + 真正遙測數據極速版）...")
 
     while True:
         # 🛡️ 每次大迴圈開始時，強制重新整理防睡眠狀態，確保筆電不待機
@@ -61,7 +69,8 @@ def rebuild_f1_dataset():
 
             for _, event in schedule.iterrows():
                 event_name = event['EventName']
-                if "Testing" in event_name or "Pre-Season" in event_name:
+                # 排除測試賽季或無效賽事
+                if "Testing" in event_name or "Pre-Season" in event_name or event['RoundNumber'] == 0:
                     continue
                 
                 safe_event_name = event_name.replace(" ", "_")
@@ -73,17 +82,50 @@ def rebuild_f1_dataset():
                     filepath = os.path.join(LOCAL_DATA_DIR, filename)
                     
                     if filename in existing_files:
-                        print(f"[已存在雲端，自動跳過] {filename}")
+                        # 已經有了就無情跳過，不印廢話浪費效能
                         continue
 
                     try:
                         session = fastf1.get_session(year, round_number, code)
                         session.load(telemetry=True, weather=False, messages=False)
                         
-                        df_to_save = session.laps
-                        if df_to_save is None or df_to_save.empty:
+                        # ==========================================
+                        # 核心修復區：抓取真正的遙測數據，而不是 Laps！
+                        # ==========================================
+                        all_telemetry = []
+                        for driver in session.drivers:
+                            try:
+                                laps = session.laps.pick_driver(driver)
+                                if len(laps) == 0: continue
+                                fastest_lap = laps.pick_fastest()
+                                telemetry = fastest_lap.get_telemetry()
+                                
+                                # 轉換車手代號為 3 字母縮寫
+                                telemetry['Driver'] = session.get_driver(driver)['Abbreviation']
+                                telemetry['Team'] = fastest_lap['Team']
+                                
+                                # 計算賽道區段
+                                max_dist = telemetry['Distance'].max()
+                                if max_dist > 0:
+                                    norm_dist = telemetry['Distance'] / max_dist
+                                    telemetry['Sector'] = pd.cut(norm_dist, bins=[0, 1/3, 2/3, 1], labels=[1, 2, 3])
+                                else:
+                                    telemetry['Sector'] = 1
+                                    
+                                all_telemetry.append(telemetry)
+                            except Exception:
+                                pass
+                        
+                        if len(all_telemetry) == 0:
                             continue
                             
+                        # 合併所有車手資料並篩選欄位
+                        df_to_save = pd.concat(all_telemetry, ignore_index=True)
+                        existing_cols = [c for c in cols_to_keep if c in df_to_save.columns]
+                        df_to_save = df_to_save[existing_cols]
+                        # ==========================================
+                        
+                        # 存檔並上傳
                         df_to_save.to_parquet(filepath, index=False)
                         
                         api.upload_file(
@@ -101,10 +143,8 @@ def rebuild_f1_dataset():
                         if os.path.exists(filepath):
                             os.remove(filepath)
                             
-                        time.sleep(0.3)
-                            
                     except Exception as e:
-                        # 💥 遇到任何錯誤 (包含 API 限制) 都只印出警告，直接硬幹下一個檔案
+                        # 💥 遇到任何錯誤都只印出警告，直接硬幹下一個檔案
                         print(f"⚠️ 傳輸 {filename} 時發生錯誤: {e}，無視警告直接進入下一個！")
                         continue
 

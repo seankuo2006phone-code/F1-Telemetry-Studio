@@ -12,12 +12,29 @@ class Config:
     DEFAULT_TRACK = "Monza"
     DEFAULT_SESSION = "Q"
 
-    # Plotly 圖表設定，強制顯示工具列並關閉滾動縮放
+    # Plotly 圖表設定，關閉上方工具列並保留 hover 功能
     PLOTLY_CONFIG = {
-        'displayModeBar': True,
-        'modeBarButtonsToRemove': ['zoomIn2d', 'zoomOut2d', 'pan2d', 'lasso2d'], # 移除不常用的
-        'scrollZoom': False,
-        'doubleClick': 'reset',
+        'responsive': True,
+        'displayModeBar': False,
+        'hoverdistance': 20,
+    }
+
+    # Plotly layout 設定，讓圖表自動填滿容器並鎖定軸線縮放
+    PLOTLY_LAYOUT = {
+        'autosize': True,
+        'paper_bgcolor': 'rgba(0,0,0,0)',
+        'plot_bgcolor': 'rgba(0,0,0,0)',
+        'margin': { 't': 10, 'b': 10, 'l': 10, 'r': 10 },
+        'xaxis': {
+            'visible': False,
+            'fixedrange': True,
+        },
+        'yaxis': {
+            'visible': False,
+            'fixedrange': True,
+            'scaleanchor': 'x',
+        },
+        'hovermode': 'closest',
     }
 
 config = Config()

@@ -15,7 +15,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-REPO_ID = "SeanKuo2006/F1-Telemetry-Data"
+@app.get("/")
+def read_root():
+    return {
+        "status": "ok",
+        "message": "F1 Telemetry API is running!",
+        "service": "F1 Telemetry Studio PRO API (Bulletproof Engine)",
+        "endpoints": ["/api/options", "/api/telemetry"]
+    }
+
+REPO_ID = "SeanKuo2006/F1-Telemetry-Data-V2"
 _CACHE_MAPPING = None
 _CACHE_OPTIONS = None
 
