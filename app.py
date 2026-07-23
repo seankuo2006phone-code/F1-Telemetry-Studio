@@ -45,22 +45,19 @@ custom_css = """
 }
 
 /* ---------------------------------------------------
-   EXTREME BORDERLESS SELECTBOX (No Border, No Underline, No Background)
+   ABSOLUTE BORDERLESS SELECTBOX (No Border, No Background, No Underline)
 --------------------------------------------------- */
-div[data-testid="stSelectbox"] {
-    background-color: transparent !important;
-}
-div[data-baseweb="select"] {
-    background-color: transparent !important;
-}
-div[data-baseweb="select"] > div,
-div[data-baseweb="select"] > div:hover, 
-div[data-baseweb="select"] > div:focus,
-div[data-baseweb="select"] > div:focus-within,
-div[data-baseweb="select"] > div:active {
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
     background-color: transparent !important;
     border: none !important;
-    border-bottom: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+}
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:active {
+    background-color: transparent !important;
+    border: none !important;
     box-shadow: none !important;
     outline: none !important;
 }
@@ -71,6 +68,17 @@ div[data-baseweb="select"] span {
     padding-left: 0 !important;
 }
 div[data-baseweb="select"] svg { display: none !important; }
+
+/* Custom Dropdown Arrow */
+div[data-testid="stSelectbox"]::after {
+    content: "▼";
+    position: absolute;
+    right: 5px;
+    top: 35px;
+    font-size: 10px;
+    color: #555;
+    pointer-events: none;
+}
 
 /* Dropdown menu overlay */
 div[data-baseweb="popover"] > div {
@@ -195,7 +203,6 @@ def load_telemetry(filename: str) -> pd.DataFrame:
             elif cl == 'y': rename_map[col] = 'Y'
         
         df_loaded.rename(columns=rename_map, inplace=True)
-        # 移除重複的欄位名 (解決 DataFrame 轉 Series 產生的 AttributeError)
         df_loaded = df_loaded.loc[:, ~df_loaded.columns.duplicated()]
         
         if 'Brake' in df_loaded.columns:
@@ -304,7 +311,6 @@ with col_left:
             filename = file_row.iloc[0].filename if not file_row.empty else None
             df = load_telemetry(filename) if filename else pd.DataFrame()
             
-            # 安全擷取 Driver 欄位，徹底防止 DataFrame 沒有 .unique() 的問題
             if "Driver" in df.columns:
                 driver_series = df["Driver"]
                 if isinstance(driver_series, pd.DataFrame):
@@ -363,7 +369,7 @@ with col_mid:
                         hovertemplate=f"<b>{drv}</b>: %{{y}}<extra></extra>"
                     ), row=row, col=1)
 
-            # Fixed scale with cursor tracking
+            # Locked layout with spike lines
             fig.update_layout(
                 height=780, margin=dict(l=25, r=15, t=30, b=10),
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
@@ -383,8 +389,9 @@ with col_mid:
                     showgrid=True, gridcolor='rgba(255,255,255,0.05)', fixedrange=True, 
                     row=i, col=1, tickfont=dict(size=9, color='#777')
                 )
+                # 解決 ValueError: Invalid property specified 'letter_spacing' 的核心！
                 if i-1 < len(fig.layout.annotations):
-                    fig.layout.annotations[i-1].update(font=dict(size=10, color="#888", letter_spacing="2px"))
+                    fig.layout.annotations[i-1].update(font=dict(size=10, color="#888"))
 
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
