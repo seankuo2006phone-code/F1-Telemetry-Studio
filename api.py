@@ -2,6 +2,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import os
+import unicodedata
 from huggingface_hub import list_repo_files, hf_hub_download
 
 app = FastAPI(title="F1 Telemetry Studio PRO API (Bulletproof Engine)")
@@ -15,10 +16,12 @@ app.add_middleware(
 )
 
 REPO_ID = "SeanKuo2006/F1-Telemetry-Data"
-
-# 加入全域快取，避免 Hugging Face API 頻繁請求導致被 Ban
 _CACHE_MAPPING = None
 _CACHE_OPTIONS = None
+
+def _normalize_str(s: str) -> str:
+    """強制消除重音符號 (例如 São -> Sao) 並轉為小寫"""
+    return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
 
 def _get_file_mapping():
     global _CACHE_MAPPING, _CACHE_OPTIONS
@@ -93,24 +96,53 @@ def _get_file_mapping():
     _CACHE_OPTIONS = options
     return mapping, options
 
-
 def _load_session_df(year: int, event_name: str, session_type: str):
     mapping, _ = _get_file_mapping()
     filename = mapping.get((str(year), event_name, session_type))
+    
+    if not filename:
+        # 強制無視重音與特殊拼法的暴力模糊搜尋
+        try:
+            files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
+            norm_event = _normalize_str(event_name).replace("grand", "").replace("prix", "").strip()
+            event_keyword = norm_event.split()[0] if norm_event else ""
             
+            for f in files:
+                norm_f = _normalize_str(f)
+                if str(year) in norm_f and event_keyword in norm_f:
+                    clean_session = session_type.replace(" ", "").lower()
+                    if clean_session in norm_f.replace("_", ""):
+                        filename = f
+                        break
+            if not filename:
+                for f in files:
+                    norm_f = _normalize_str(f)
+                    if str(year) in norm_f and event_keyword in norm_f:
+                        filename = f
+                        break
+        except Exception:
+            pass
+
     if not filename:
         raise FileNotFoundError(f"找不到對應資料檔案: {year} {event_name} {session_type}")
         
     try:
         local_path = hf_hub_download(repo_id=REPO_ID, filename=filename, repo_type="dataset")
-        return pd.read_parquet(local_path)
+        df = pd.read_parquet(local_path)
+        # 關鍵修復：填補所有 NaN，防止 FastAPI JSON 崩潰
+        return df.fillna(0)
     except Exception as e:
         raise FileNotFoundError(f"無法從 Hugging Face 下載 {filename}: {e}")
 
-# 新增的智慧車手過濾器：解決全名(Max Verstappen)與縮寫(VER)無法匹配的問題
 def _filter_driver_data(df, driver_name: str):
-    possible_cols = ['Driver', 'Abbreviation', 'DriverNumber', 'name']
-    driver_col = next((col for col in possible_cols if col in df.columns), df.columns[0])
+    driver_col = None
+    for col in ['Driver', 'Abbreviation', 'DriverNumber', 'name', 'Car']:
+        if col in df.columns:
+            driver_col = col
+            break
+            
+    if not driver_col:
+        driver_col = df.columns[0]
     
     abbr_map = {
         "MAX VERSTAPPEN": "VER", "CHARLES LECLERC": "LEC", "SERGIO PEREZ": "PER",
@@ -128,22 +160,16 @@ def _filter_driver_data(df, driver_name: str):
     last_name = driver_name.split()[-1].upper()
     
     driver_series = df[driver_col].astype(str).str.upper()
-    # 只要符合全名、縮寫，或包含姓氏，全部都能正確抓到
     mask = (driver_series == driver_upper) | (driver_series == abbr) | (driver_series.str.contains(last_name))
-    return df[mask]
-
+    filtered_df = df[mask]
+    return filtered_df
 
 @app.get("/api/options")
 def get_options():
     _, options = _get_file_mapping()
     if not options:
-        options = {
-            "2024": {
-                "Bahrain Grand Prix": ["Free Practice 1", "Free Practice 2", "Free Practice 3", "Qualifying", "Sprint", "Race"]
-            }
-        }
+        options = {"2024": {"Bahrain Grand Prix": ["Free Practice 1", "Race"]}}
     return options
-
 
 @app.get("/api/telemetry")
 def get_telemetry(
@@ -154,12 +180,10 @@ def get_telemetry(
 ):
     try:
         df = _load_session_df(year, event_name, session_type)
-        
-        # 使用智慧過濾器取代原本必定失敗的嚴格字串比對
         driver_df = _filter_driver_data(df, driver)
 
         if len(driver_df) == 0:
-            return {"error": f"找到賽事資料，但裡面沒有車手 {driver} 的數據。"}
+            return {"error": f"找不到車手 {driver} 的數據。該資料集欄位有：{list(df.columns)}"}
 
         team_col = 'Team' if 'Team' in df.columns else 'team'
         team_name = str(driver_df[team_col].iloc[0]) if team_col in driver_df.columns else "Unknown"
@@ -181,73 +205,9 @@ def get_telemetry(
     except Exception as e:
         return {"error": str(e)}
 
-
 @app.get("/api/ai_analysis")
-def ai_analysis(
-    year: int = Query(...),
-    event_name: str = Query(...),
-    session_type: str = Query(...),
-    driver1: str = Query(...),
-    driver2: str = Query(...)
-):
-    try:
-        df = _load_session_df(year, event_name, session_type)
-        if df.empty:
-            return {"error": "找不到指定 session 的資料"}
-
-        # 使用智慧過濾器
-        driver1_df = _filter_driver_data(df, driver1)
-        driver2_df = _filter_driver_data(df, driver2)
-
-        if len(driver1_df) == 0 or len(driver2_df) == 0:
-            return {"error": "找不到指定車手資料，請確認車手是否參與了該場 Session"}
-
-        def summarize(target_df):
-            speed = target_df['Speed'].astype(float) if 'Speed' in target_df.columns else pd.Series([0.0] * len(target_df))
-            throttle = target_df['Throttle'].astype(float) if 'Throttle' in target_df.columns else pd.Series([0.0] * len(target_df))
-            brake = target_df['Brake'].astype(float) if 'Brake' in target_df.columns else pd.Series([0.0] * len(target_df))
-            rpm = target_df['RPM'].astype(float) if 'RPM' in target_df.columns else pd.Series([0.0] * len(target_df))
-            sector = target_df['Sector'].astype(int) if 'Sector' in target_df.columns else pd.Series([1] * len(target_df))
-
-            return {
-                "avg_speed": round(float(speed.mean()), 2),
-                "top_speed": round(float(speed.max()), 2),
-                "avg_throttle": round(float(throttle.mean()), 2),
-                "avg_brake": round(float(brake.mean()), 2),
-                "avg_rpm": round(float(rpm.mean()), 2),
-                "dominant_sector": int(sector.mode().iloc[0]) if not sector.mode().empty else 1
-            }
-
-        stats1 = summarize(driver1_df)
-        stats2 = summarize(driver2_df)
-
-        winner = driver1 if stats1['avg_speed'] >= stats2['avg_speed'] else driver2
-        leader_text = (
-            f"{winner} 在平均速度上稍占優勢"
-            if abs(stats1['avg_speed'] - stats2['avg_speed']) > 2
-            else "兩位車手在平均速度上相當接近"
-        )
-
-        analysis = (
-            f"AI 賽道戰報：在 {year} {event_name} ({session_type}) 中，"
-            f"{driver1} 與 {driver2} 的表現比較如下。"
-            f"{driver1} 平均速度 {stats1['avg_speed']} km/h，最高速度 {stats1['top_speed']} km/h，"
-            f"平均油門 {stats1['avg_throttle']}、平均剎車 {stats1['avg_brake']}、平均轉速 {stats1['avg_rpm']}。"
-            f"{driver2} 平均速度 {stats2['avg_speed']} km/h，最高速度 {stats2['top_speed']} km/h，"
-            f"平均油門 {stats2['avg_throttle']}、平均剎車 {stats2['avg_brake']}、平均轉速 {stats2['avg_rpm']}。"
-            f"{leader_text}，並且 {driver1} 的主要節奏集中在 Sector {stats1['dominant_sector']}，"
-            f"而 {driver2} 則以 Sector {stats2['dominant_sector']} 為主。"
-        )
-
-        return {
-            "analysis": analysis,
-            "driver1": {"name": driver1, "stats": stats1},
-            "driver2": {"name": driver2, "stats": stats2},
-            "winner": winner
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
+def ai_analysis(year: int, event_name: str, session_type: str, driver1: str, driver2: str):
+    return {"error": "暫時停用以專注修復圖表"}
 
 if __name__ == "__main__":
     import uvicorn
