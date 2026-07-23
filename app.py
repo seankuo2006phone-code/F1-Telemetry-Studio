@@ -5,7 +5,7 @@ from plotly.subplots import make_subplots
 from huggingface_hub import list_repo_files
 
 # =========================================================
-# CONFIG
+# CONFIG & 完美還原 F1 官方視覺與無邊框 CSS
 # =========================================================
 st.set_page_config(
     page_title="F1 Telemetry Studio",
@@ -15,469 +15,250 @@ st.set_page_config(
 
 REPO_ID = "SeanKuo2006/F1-Telemetry-Data"
 
-# 終極無邊框 CSS 注入：強制抹除所有輸入框邊界、背景，並隱藏連結圖標 (🔗)
 custom_css = """
 <style>
+/* 隱藏預設元素 */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
 
-/* 隱藏標題旁的 🔗 圖標 */
+/* 強制滿版、無邊框、黑色背景 */
+.block-container {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+    max-width: 100% !important;
+    background-color: #000000 !important;
+}
+.stApp {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* 頂部 F1 紅色警示邊條 */
+header::before {
+    content: "";
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 4px;
+    background-color: #e10600;
+    z-index: 99999;
+}
+
+/* 隱藏標題連結圖標 */
 h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
     display: none !important;
 }
 
-/* 徹底透明化所有 Selectbox 的背景與邊框 */
-div[data-testid="stSelectbox"] * {
+/* 無邊框下劃線選單外觀 */
+div[data-testid="stSelectbox"] > div {
     background-color: transparent !important;
     border: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 0px !important;
     box-shadow: none !important;
+    padding-left: 0px !important;
 }
-
-/* 確保下拉選單文字顏色 */
+div[data-testid="stSelectbox"] > div:hover {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.4) !important;
+}
 div[data-testid="stSelectbox"] div[data-baseweb="select"] span {
     color: #FFFFFF !important;
-    font-size: 1rem !important;
+    font-size: 14px !important;
 }
 div[data-testid="stSelectbox"] label p {
-    color: #888888 !important;
-    font-size: 0.85rem !important;
-    letter-spacing: 1px !important;
+    color: #6b7280 !important;
+    font-size: 10px !important;
+    letter-spacing: 0.2em !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
 }
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
 # =========================================================
-# TEAM COLORS
+# F1 官方頂部列 (Logo + 導覽連結 + Sign In / Subscribe)
+# =========================================================
+st.markdown("""
+<div style="display: flex; justify-content: space-between; align-items: center; background-color: #15151e; padding: 12px 24px; border-bottom: 1px solid rgba(255,255,255,0.1); margin: -2rem -2rem 1.5rem -2rem;">
+    <div style="display: flex; align-items: center; gap: 35px;">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/3/33/F1.svg" alt="F1 Logo" style="height: 24px; width: auto;" />
+        <div style="display: flex; gap: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #fff; letter-spacing: 0.1em;">
+            <a href="https://www.formula1.com/en/racing/2024.html" target="_blank" style="color: white; text-decoration: none;">Schedule</a>
+            <a href="https://www.formula1.com/en/results.html" target="_blank" style="color: white; text-decoration: none;">Results</a>
+            <a href="https://www.formula1.com/en/results.html/team.html" target="_blank" style="color: white; text-decoration: none;">Standings</a>
+            <a href="https://www.formula1.com/en/drivers.html" target="_blank" style="color: white; text-decoration: none;">Drivers</a>
+        </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 15px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+        <a href="https://account.formula1.com" target="_blank" style="color: #d1d5db; text-decoration: none;">Sign In</a>
+        <a href="https://f1tv.formula1.com/" target="_blank" style="background-color: #e10600; color: white; padding: 6px 14px; border-radius: 2px; text-decoration: none;">Subscribe</a>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# =========================================================
+# 標題與即時同步燈號列
+# =========================================================
+col_title, col_live = st.columns([4, 1])
+with col_title:
+    st.markdown('<h1 style="font-size: 16px; font-weight: 300; letter-spacing: 0.2em; margin: 0;">TELEMETRY STUDIO <span style="background-color: #e10600; font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 10px;">PRO v2</span></h1>', unsafe_allow_html=True)
+with col_live:
+    st.markdown('<div style="text-align: right; font-size: 10px; font-family: monospace; color: #9ca3af; padding-top: 3px;">LIVE SYNC <span style="display: inline-block; width: 8px; height: 8px; background-color: #e10600; border-radius: 50%; margin-left: 5px;"></span></div>', unsafe_allow_html=True)
+
+st.markdown("<hr style='border-color: rgba(255,255,255,0.1); margin: 12px 0;'>", unsafe_allow_html=True)
+
+# =========================================================
+# DATA & FILE INDEX
 # =========================================================
 TEAM_COLORS = {
-    "red bull": "#3671C6",
-    "ferrari": "#F91536",
-    "mercedes": "#6CD3BF",
-    "mclaren": "#F58020",
-    "aston martin": "#229971",
-    "alpine": '#2293D1',
-    "williams": "#37BEDD",
-    "alphatauri": "#5E8FAA",
-    "alfa romeo": "#C92D4B",
-    "haas": "#B6BABD",
-    "rb": "#6692FF",
-    "racing bulls": "#6692FF",
-    "sauber": "#52E252",
-    "kick sauber": "#52E252"
+    "red bull": "#3671C6", "ferrari": "#F91536", "mercedes": "#6CD3BF", "mclaren": "#F58020",
+    "aston martin": "#229971", "alpine": '#2293D1', "williams": "#37BEDD", "alphatauri": "#5E8FAA",
+    "alfa romeo": "#C92D4B", "haas": "#B6BABD", "rb": "#6692FF", "racing bulls": "#6692FF",
+    "sauber": "#52E252", "kick sauber": "#52E252"
 }
 
 SESSION_NAMES = {
-    "R": "Race",
-    "Q": "Qualifying",
-    "S": "Sprint",
-    "SQ": "Sprint Shootout",
-    "FP1": "Free Practice 1",
-    "FP2": "Free Practice 2",
-    "FP3": "Free Practice 3"
+    "R": "Race", "Q": "Qualifying", "S": "Sprint", "SQ": "Sprint Shootout",
+    "FP1": "Free Practice 1", "FP2": "Free Practice 2", "FP3": "Free Practice 3"
 }
 
 def get_team_color(team: str) -> str:
     team = str(team).lower()
-    return next(
-        (v for k, v in TEAM_COLORS.items() if k in team),
-        "#FFFFFF"
-    )
+    return next((v for k, v in TEAM_COLORS.items() if k in team), "#FFFFFF")
 
-# =========================================================
-# FILE LIST CACHE
-# =========================================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_file_index() -> pd.DataFrame:
-    files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
-
+    try:
+        files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
+    except:
+        return pd.DataFrame(columns=["year", "event", "session", "filename"])
     rows = []
     for f in files:
-        if not f.endswith(".parquet"):
-            continue
-
+        if not f.endswith(".parquet"): continue
         parts = f[:-8].split("_")
-        if len(parts) < 3:
-            continue
-
-        rows.append({
-            "year": int(parts[0]),
-            "event": "_".join(parts[1:-1]),
-            "session": parts[-1],
-            "filename": f
-        })
-
+        if len(parts) < 3: continue
+        rows.append({"year": int(parts[0]), "event": "_".join(parts[1:-1]), "session": parts[-1], "filename": f})
     return pd.DataFrame(rows)
 
 df_files = get_file_index()
 
-# =========================================================
-# TELEMETRY LOADER
-# =========================================================
-@st.cache_data(show_spinner="Loading telemetry data...")
+@st.cache_data(show_spinner=False)
 def load_telemetry(filename: str) -> pd.DataFrame:
     path = f"hf://datasets/{REPO_ID}/{filename}"
-
-    cols = [
-        "Driver", "Team", "Distance", "Speed",
-        "Throttle", "Brake", "RPM",
-        "X", "Y", "DRS", "Sector"
-    ]
-
     try:
-        return pd.read_parquet(path, columns=cols)
-    except Exception:
-        return pd.read_parquet(path)
+        df_loaded = pd.read_parquet(path)
+        # 強制將所有欄位名稱標準化為首字母大寫，確保 Distance、Speed 等欄位100%抓得到
+        df_loaded.columns = [
+            col.strip().capitalize() if col.strip().lower() in ['distance', 'speed', 'throttle', 'brake', 'rpm', 'driver', 'team', 'x', 'y', 'drs', 'sector'] else col 
+            for col in df_loaded.columns
+        ]
+        return df_loaded
+    except:
+        return pd.DataFrame()
 
 # =========================================================
-# HEADER
+# 三欄式排版：左側選單 | 中間遙測圖表 | 右側賽道圖
 # =========================================================
-st.markdown(
-    """
-    <div style="text-align:center;padding:10px 0 30px 0;">
-        <h1 style="font-size:3rem;font-weight:900;letter-spacing:2px;margin:0;">
-            F1 Telemetry Studio
-        </h1>
-        <p style="color:#888;font-size:1rem;">
-            Professional Formula One Telemetry Analysis Platform
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+sidebar_col, main_col, map_col = st.columns([1, 2.3, 1.7], gap="medium")
 
-# =========================================================
-# TOP CONTROLS
-# =========================================================
-c1, c2, c3, c4, c5 = st.columns(5)
+with sidebar_col:
+    if not df_files.empty:
+        years = sorted(df_files.year.unique(), reverse=True)
+        year = st.selectbox("Year", years, index=0 if 2024 in years else 0)
 
-with c1:
-    year = st.selectbox(
-        "YEAR",
-        sorted(df_files.year.unique(), reverse=True)
-    )
+        events = sorted(df_files[df_files.year == year].event.unique())
+        event = st.selectbox("Grand Prix", events, index=0)
 
-events = sorted(df_files[df_files.year == year].event.unique())
+        sessions = df_files[(df_files.year == year) & (df_files.event == event)].session.unique()
+        session = st.selectbox("Session", sessions, format_func=lambda x: SESSION_NAMES.get(x, x), index=0)
 
-with c2:
-    event = st.selectbox("CIRCUIT", events)
+        file_row = df_files[(df_files.year == year) & (df_files.event == event) & (df_files.session == session)]
+        filename = file_row.iloc[0].filename if not file_row.empty else None
+        
+        df = load_telemetry(filename) if filename else pd.DataFrame()
+        drivers = sorted(df.Driver.unique()) if "Driver" in df.columns else []
 
-sessions = df_files[
-    (df_files.year == year) &
-    (df_files.event == event)
-].session.unique()
+        st.markdown("<hr style='border-color: rgba(255,255,255,0.1); margin: 20px 0;'>", unsafe_allow_html=True)
+        driver1 = st.selectbox("Driver 1", drivers, index=drivers.index("VER") if "VER" in drivers else (0 if drivers else 0))
+        driver2 = st.selectbox("Driver 2", drivers, index=drivers.index("LEC") if "LEC" in drivers else (1 if len(drivers) > 1 else 0))
+    else:
+        st.selectbox("Year", [2024])
+        st.selectbox("Grand Prix", ["Bahrain Grand Prix"])
+        st.selectbox("Session", ["Qualifying"])
+        driver1, driver2 = "VER", "LEC"
+        df = pd.DataFrame()
 
-with c3:
-    session = st.selectbox(
-        "SESSION",
-        sessions,
-        format_func=lambda x: SESSION_NAMES.get(x, x)
-    )
+with main_col:
+    if df.empty or "Driver" not in df.columns:
+        st.markdown("""
+        <div style="display: flex; justify-content: center; align-items: center; height: 500px; color: #4b5563; font-size: 13px; font-weight: 500; letter-spacing: 0.2em;">
+            NO DATA AVAILABLE
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        selected = [driver1] if driver1 == driver2 else [driver1, driver2]
+        driver_groups = {k: v for k, v in df.groupby("Driver")}
 
-filename = df_files[
-    (df_files.year == year) &
-    (df_files.event == event) &
-    (df_files.session == session)
-].iloc[0].filename
-
-df = load_telemetry(filename)
-
-drivers = sorted(df.Driver.unique())
-
-with c4:
-    driver1 = st.selectbox(
-        "DRIVER 1",
-        drivers,
-        index=drivers.index("VER") if "VER" in drivers else 0
-    )
-
-with c5:
-    driver2 = st.selectbox(
-        "DRIVER 2",
-        drivers,
-        index=drivers.index("ALO") if "ALO" in drivers else (1 if len(drivers) > 1 else 0)
-    )
-
-selected = [driver1] if driver1 == driver2 else [driver1, driver2]
-driver_groups = {k: v for k, v in df.groupby("Driver")}
-
-# =========================================================
-# LAYOUT
-# =========================================================
-has_xy = {"X", "Y"}.issubset(df.columns)
-
-if has_xy:
-    col_chart, col_map = st.columns([3.3, 1.2])
-else:
-    col_chart = st.container()
-    col_map = None
-
-# =========================================================
-# TELEMETRY FIGURE
-# =========================================================
-def build_telemetry_figure(selected_drivers: list[str]) -> go.Figure:
-
-    fig = make_subplots(
-        rows=4,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.03,
-        subplot_titles=(
-            "Speed (km/h)",
-            "Throttle (%)",
-            "Brake",
-            "RPM"
+        fig = make_subplots(
+            rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.02,
+            subplot_titles=("Speed (km/h)", "Throttle (%)", "Brake", "RPM")
         )
-    )
+        metrics = [("Speed", 1, "solid"), ("Throttle", 2, "solid"), ("Brake", 3, "dot"), ("RPM", 4, "solid")]
 
-    metrics = [
-        ("Speed", 1, "solid"),
-        ("Throttle", 2, "solid"),
-        ("Brake", 3, "dot"),
-        ("RPM", 4, "solid")
-    ]
-
-    for drv in selected_drivers:
-        d = driver_groups.get(drv)
-        if d is None:
-            continue
-
-        color = get_team_color(d.Team.iloc[0])
-        x = d.Distance
-
-        for metric, row, dash in metrics:
-            if metric not in d.columns:
-                continue
-
-            y = d[metric]
-            if metric == "Brake":
-                y = y.astype("int8")
-
-            fig.add_trace(
-                go.Scattergl(
-                    x=x,
-                    y=y,
-                    mode="lines",
-                    name=drv if row == 1 else None,
-                    showlegend=row == 1,
-                    line=dict(color=color, width=2, dash=dash),
-                    legendgroup=drv,
-                    # 強制指定懸浮格式：只顯示 車手簡寫: 數據，徹底過濾掉多餘的 X 軸座標
+        for drv in selected:
+            d = driver_groups.get(drv)
+            if d is None: continue
+            color = get_team_color(d.Team.iloc[0] if "Team" in d.columns else "")
+            for metric, row, dash in metrics:
+                if metric not in d.columns: continue
+                y = d[metric].astype("int8") if metric == "Brake" else d[metric]
+                fig.add_trace(go.Scattergl(
+                    x=d["Distance"], y=y, mode="lines",
+                    name=drv if row == 1 else None, showlegend=row == 1,
+                    line=dict(color=color, width=1.5, dash=dash),
                     hovertemplate=f"{drv} : %{{y}}<extra></extra>"
-                ),
-                row=row,
-                col=1
-            )
+                ), row=row, col=1)
 
-    fig.update_layout(
-        height=860,
-        template="plotly_dark",
-        hovermode="x unified",
-        margin=dict(l=10, r=10, t=40, b=10),
-        # 數據懸浮標籤：全透明背景、無邊框、字體全部強制改為 F1 紅色 (#E10600)
-        hoverlabel=dict(
-            bgcolor="rgba(0,0,0,0)",
-            bordercolor="rgba(0,0,0,0)",
-            font=dict(size=14, color="#E10600")
-        ),
-        legend=dict(
-            orientation="h",
-            x=0.5,
-            xanchor="center",
-            y=1.02,
-            yanchor="bottom"
-        ),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)"
-    )
-
-    # 垂直對齊參考線：紅色、虛線、貫穿子圖
-    fig.update_xaxes(
-        showspikes=True,
-        spikecolor="#E10600",
-        spikethickness=1,
-        spikedash="dash",
-        spikemode="across"
-    )
-    fig.update_xaxes(title_text="Distance (m)", row=4, col=1)
-
-    return fig
-
-with col_chart:
-    st.plotly_chart(
-        build_telemetry_figure(selected),
-        use_container_width=True,
-        config={"displayModeBar": False}
-    )
-
-# =========================================================
-# TRACK MAP (右側無邊框小視窗)
-# =========================================================
-if has_xy and col_map is not None:
-    with col_map:
-        st.markdown(
-            "<h4 style='text-align:center;color:#CCCCCC;font-weight:600;'>Track Map</h4>",
-            unsafe_allow_html=True
+        fig.update_layout(
+            height=720, margin=dict(l=35, r=10, t=10, b=10),
+            paper_bgcolor='transparent', plot_bgcolor='transparent',
+            showlegend=False, hovermode='x unified'
         )
 
-        track = driver_groups[driver1]
-        fig_track = go.Figure()
+        for i in range(1, 5):
+            fig.update_xaxes(showgrid=True, gridcolor='#121212', row=i, col=1, tickfont=dict(size=9, color='#666'))
+            fig.update_yaxes(showgrid=True, gridcolor='#121212', row=i, col=1, tickfont=dict(size=9, color='#666'))
 
-        if "Sector" not in track.columns:
-            dist = track.Distance / track.Distance.max()
-            sectors = pd.cut(
-                dist,
-                bins=[0, 1/3, 2/3, 1],
-                labels=[1, 2, 3]
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+with map_col:
+    if not df.empty and {"X", "Y"}.issubset(df.columns):
+        st.markdown('<p style="font-size: 10px; color: #6b7280; letter-spacing: 0.15em; font-weight: 600; margin-bottom: 5px;">TRACK MAP (SECTOR 1 / 2 / 3)</p>', unsafe_allow_html=True)
+        track = df[df.Driver == driver1] if "Driver" in df.columns else df
+        
+        if not track.empty:
+            max_d = track["Distance"].max() if "Distance" in track.columns else 1
+            s1_lim, s2_lim = max_d * 0.32, max_d * 0.70
+            
+            s1_x, s1_y, s2_x, s2_y, s3_x, s3_y = [], [], [], [], [], []
+            for i in range(len(track)):
+                d = track["Distance"].iloc[i]
+                px, py = track["X"].iloc[i], track["Y"].iloc[i]
+                if d <= s1_lim: s1_x.append(px); s1_y.append(py)
+                elif d <= s2_lim: s2_x.append(px); s2_y.append(py)
+                else: s3_x.append(px); s3_y.append(py)
+
+            map_fig = go.Figure()
+            map_fig.add_trace(go.Scattergl(x=s1_x, y=s1_y, mode='lines', line=dict(color='#E10600', width=4), hoverinfo='skip'))
+            map_fig.add_trace(go.Scattergl(x=s2_x, y=s2_y, mode='lines', line=dict(color='#00A0E9', width=4), hoverinfo='skip'))
+            map_fig.add_trace(go.Scattergl(x=s3_x, y=s3_y, mode='lines', line=dict(color='#FFD500', width=4), hoverinfo='skip'))
+
+            map_fig.update_layout(
+                height=520, margin=dict(l=10, r=10, t=10, b=10),
+                paper_bgcolor='transparent', plot_bgcolor='transparent',
+                xaxis=dict(visible=False, scaleanchor='y', scaleratio=1, fixedrange=True),
+                yaxis=dict(visible=False, fixedrange=True), showlegend=False
             )
-            track = track.assign(Sector=sectors)
-
-        sector_colors = {
-            1: "#E10600",
-            2: "#FFD700",
-            3: "#00D2BE"
-        }
-
-        for sec, color in sector_colors.items():
-            sec_df = track[track.Sector.astype(str) == str(sec)]
-            fig_track.add_trace(
-                go.Scattergl(
-                    x=sec_df.X,
-                    y=sec_df.Y,
-                    mode="lines",
-                    line=dict(color=color, width=4),
-                    name=f"Sector {sec}",
-                    hoverinfo="skip"
-                )
-            )
-
-        if "DRS" in track.columns:
-            drs = track[track.DRS >= 10]
-            fig_track.add_trace(
-                go.Scattergl(
-                    x=drs.X,
-                    y=drs.Y,
-                    mode="markers",
-                    marker=dict(color="#00FF7F", size=5),
-                    name="DRS Active",
-                    hoverinfo="skip"
-                )
-            )
-
-        fig_track.update_layout(
-            height=500,
-            template="plotly_dark",
-            margin=dict(l=0, r=0, t=10, b=0),
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                x=0.5,
-                xanchor="center",
-                y=1.02,
-                yanchor="bottom"
-            ),
-            # fixedrange=True 鎖定 X/Y 軸範圍，使地圖無法被滑鼠滾輪縮放
-            xaxis=dict(
-                visible=False,
-                showgrid=False,
-                zeroline=False,
-                fixedrange=True
-            ),
-            yaxis=dict(
-                visible=False,
-                showgrid=False,
-                zeroline=False,
-                scaleanchor="x",
-                fixedrange=True
-            ),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            dragmode="pan" # 開啟滑鼠點擊抓取平移
-        )
-
-        # F1 TELEMETRY STUDIO FINAL HOVER CONFIG
-        fig_track.update_layout(
-            hovermode="x",
-            hoverlabel=dict(
-                bgcolor="rgba(0,0,0,0)",
-                bordercolor="rgba(0,0,0,0)",
-                font=dict(size=14, color="#FF0000")
-            )
-        )
-
-        fig_track.update_xaxes(showspikes=False)
-        fig_track.update_yaxes(showspikes=False)
-
-        # 顯示 X 軸的 spike（時間游標）
-        try:
-            fig_track.update_xaxes(
-                showspikes=True,
-                spikecolor="#E10600",
-                spikedash="dash",
-                spikemode="across"
-            )
-        except NameError:
-            pass
-
-        # 這是確保工具列在手機上也會出現的設定
-        config = {
-            'displayModeBar': True,
-            'modeBarButtonsToRemove': ['zoomIn2d', 'zoomOut2d', 'pan2d', 'lasso2d'], # 移除不常用的
-            'scrollZoom': False,
-            'doubleClick': 'reset',
-        }
-
-        # 在圖上繪製紅色虛線（時間軸標記）
-        # 確保 target_time_x_value 已在其他地方設定為你想要標記的 X 軸時間值
-        try:
-            fig_track.add_shape(
-                type="line",
-                x0=target_time_x_value,
-                y0=0,
-                x1=target_time_x_value,
-                y1=350,
-                line=dict(
-                    color="red",
-                    width=2,
-                    dash="dash"
-                )
-            )
-        except NameError:
-            # 如果 target_time_x_value 未定義則跳過，不影響其他功能
-            pass
-
-        # 繪製圖表
-        st.plotly_chart(fig_track, config=config, use_container_width=True)
-
-# =========================================================
-# RAW DATA
-# =========================================================
-st.divider()
-
-with st.expander("Raw Telemetry Data"):
-    st.dataframe(
-        df[df.Driver.isin(selected)],
-        use_container_width=True,
-        hide_index=True
-    )
-
-# =========================================================
-# DATASET FILES
-# =========================================================
-# ---------- Load dataset ----------
-try:
-    all_files = get_file_list()
-except NameError:
-    # Fallback to repository listing if get_file_list is unavailable
-    all_files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
-
-# Debug
-st.write("Number of parquet files:", len(all_files))
-st.write(all_files)
-
-options = []
-for f in all_files:
-    options.append(f)
-
-selected_files = st.multiselect("Select dataset files to load:", options, default=options[:1])
+            st.plotly_chart(map_fig, use_container_width=True, config={'displayModeBar': False})
