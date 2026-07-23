@@ -21,18 +21,37 @@ os.makedirs(DATASET_DIR, exist_ok=True)
 
 def _load_session_df(year: int, event_name: str, session_type: str):
     raw_event = event_name.replace(" ", "_")
-    filename = f"{year}_{raw_event}_{session_type}.parquet"
-    local_path = os.path.join(DATASET_DIR, filename)
 
-    if not os.path.exists(local_path):
+    # 建立前端名稱與 Hugging Face 實際檔名縮寫的對應對照表
+    session_mapping = {
+        "Free Practice 1": ["FP1", "1"],
+        "Free Practice 2": ["FP2", "2"],
+        "Free Practice 3": ["FP3", "3"],
+        "Qualifying": ["Q", "Qualifying"],
+        "Race": ["R", "Race"],
+        "Sprint": ["Sprint"],
+        "Sprint Qualifying": ["Sprint Qualifying", "SQ"]
+    }
+
+    suffixes = session_mapping.get(session_type, [session_type])
+
+    # 依次嘗試可能的檔名格式
+    for suffix in suffixes:
+        filename = f"{year}_{raw_event}_{suffix}.parquet"
+        local_path = os.path.join(DATASET_DIR, filename)
+
+        if os.path.exists(local_path):
+            return pd.read_parquet(local_path)
+
         hf_url = f"hf://datasets/{REPO_ID}/{filename}"
         try:
             df_temp = pd.read_parquet(hf_url)
             df_temp.to_parquet(local_path)
+            return df_temp
         except Exception:
-            raise FileNotFoundError(f"找不到資料: {filename}")
+            continue
 
-    return pd.read_parquet(local_path)
+    raise FileNotFoundError(f"找不到對應資料檔案: {year} {event_name} {session_type}")
 
 
 @app.get("/api/options")
