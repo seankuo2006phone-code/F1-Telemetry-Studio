@@ -1,0 +1,15 @@
+# Python 虛擬環境與快取
+.venv/
+.venv-*/
+__pycache__/
+*.pyc
+data_cache/
+f1_cache/
+parquet_cache/
+
+# Node.js 巨型套件資料夾 (涵蓋 frontend 裡面的 node_modules)
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.DS_Store
