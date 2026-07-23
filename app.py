@@ -6,7 +6,6 @@ from plotly.subplots import make_subplots
 from huggingface_hub import list_repo_files
 import warnings
 
-# Ignore warnings
 warnings.filterwarnings('ignore')
 
 # =========================================================
@@ -22,12 +21,12 @@ REPO_ID = "SeanKuo2006/F1-Telemetry-Data"
 
 custom_css = """
 <style>
-/* Hide Streamlit defaults */
+/* Hide Streamlit elements */
 #MainMenu, footer, header { visibility: hidden !important; }
 
-/* Force Full Width & Pure Black Background */
+/* Force pure black background & edge-to-edge padding */
 .block-container {
-    padding: 0rem 1rem !important;
+    padding: 0rem 1.5rem !important;
     max-width: 100% !important;
     background-color: #000000 !important;
 }
@@ -36,7 +35,7 @@ custom_css = """
     color: #ffffff !important;
 }
 
-/* F1 Top Red Border */
+/* Red top accent line */
 .stApp::before {
     content: "";
     position: fixed;
@@ -48,10 +47,8 @@ custom_css = """
 /* ---------------------------------------------------
    EXTREME BORDERLESS SELECTBOX (No Border, No Underline, No Background)
 --------------------------------------------------- */
-div[data-testid="stSelectbox"] > div {
+div[data-testid="stSelectbox"] {
     background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
 }
 div[data-baseweb="select"] {
     background-color: transparent !important;
@@ -73,13 +70,12 @@ div[data-baseweb="select"] span {
     font-weight: 500 !important;
     padding-left: 0 !important;
 }
-/* Hide dropdown arrow */
 div[data-baseweb="select"] svg { display: none !important; }
 
-/* Dropdown list styling */
+/* Dropdown menu overlay */
 div[data-baseweb="popover"] > div {
     background-color: #111111 !important;
-    border: 1px solid #222 !important;
+    border: 1px solid #222222 !important;
     border-radius: 4px !important;
 }
 ul[data-testid="stSelectboxVirtualDropdown"] li {
@@ -90,7 +86,7 @@ ul[data-testid="stSelectboxVirtualDropdown"] li:hover {
     background-color: #e10600 !important;
 }
 
-/* Selectbox labels (Year, Grand Prix...) */
+/* Selectbox labels */
 div[data-testid="stSelectbox"] label p {
     color: #6b7280 !important;
     font-size: 10px !important;
@@ -99,7 +95,7 @@ div[data-testid="stSelectbox"] label p {
     text-transform: uppercase !important;
 }
 
-/* Custom Scrollbar */
+/* Minimal scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; }
@@ -111,12 +107,9 @@ st.markdown(custom_css, unsafe_allow_html=True)
 # =========================================================
 # 2. Perfect Aligned Top Header (Logo + Nav + Title)
 # =========================================================
-# Built entirely in HTML to avoid Streamlit's anchor link icons and column misalignments
 header_html = """
-<div style="background-color: #15151e; padding: 15px 25px; margin: 0rem -1rem 20px -1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
-    
-    <!-- Top Nav Row -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+<div style="background-color: #15151e; padding: 15px 25px; margin: 0rem -1.5rem 20px -1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
         <div style="display: flex; align-items: center; gap: 35px;">
             <img src="https://upload.wikimedia.org/wikipedia/commons/3/33/F1.svg" alt="F1 Logo" style="height: 22px; width: auto;" />
             <div style="display: flex; gap: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #fff; letter-spacing: 0.1em;">
@@ -131,8 +124,6 @@ header_html = """
             <a href="https://f1tv.formula1.com/" target="_blank" style="background-color: #e10600; color: white; padding: 6px 14px; border-radius: 2px; text-decoration: none;">Subscribe</a>
         </div>
     </div>
-
-    <!-- Title & Live Sync Row (Perfectly Aligned) -->
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center;">
             <span style="font-size: 18px; font-weight: 300; letter-spacing: 0.25em; color: white; margin: 0;">TELEMETRY STUDIO</span>
@@ -196,13 +187,16 @@ def load_telemetry(filename: str) -> pd.DataFrame:
             elif cl == 'throttle': rename_map[col] = 'Throttle'
             elif cl == 'brake': rename_map[col] = 'Brake'
             elif cl == 'rpm': rename_map[col] = 'RPM'
-            elif cl == 'ngear' or cl == 'gear': rename_map[col] = 'Gear'
+            elif cl in ['ngear', 'gear']: rename_map[col] = 'Gear'
             elif cl == 'drs': rename_map[col] = 'DRS'
             elif 'driver' in cl and 'ahead' not in cl: rename_map[col] = 'Driver'
             elif cl == 'team': rename_map[col] = 'Team'
             elif cl == 'x': rename_map[col] = 'X'
             elif cl == 'y': rename_map[col] = 'Y'
+        
         df_loaded.rename(columns=rename_map, inplace=True)
+        # 移除重複的欄位名 (解決 DataFrame 轉 Series 產生的 AttributeError)
+        df_loaded = df_loaded.loc[:, ~df_loaded.columns.duplicated()]
         
         if 'Brake' in df_loaded.columns:
             df_loaded['Brake'] = pd.to_numeric(df_loaded['Brake'], errors='coerce').fillna(0).astype(int)
@@ -220,7 +214,6 @@ def load_telemetry(filename: str) -> pd.DataFrame:
 def calculate_delta_time(d1, d2):
     if d1.empty or d2.empty or 'Distance' not in d1.columns or 'Distance' not in d2.columns:
         return None
-        
     try:
         dist1 = d1['Distance'].values
         speed_kmh1 = d1['Speed'].values
@@ -245,19 +238,22 @@ def calculate_delta_time(d1, d2):
         return None
 
 # =========================================================
-# 5. AI Analytics Engine (Emoji-free to prevent SyntaxError)
+# 5. AI Insights Engine
 # =========================================================
 def generate_ai_insights(df, drv1, drv2):
     if df.empty or "Speed" not in df.columns:
         return "<p style='color: #666; font-size: 13px; font-family: monospace;'>[ Awaiting telemetry packets... ]</p>"
         
-    d1, d2 = df[df['Driver'] == drv1], df[df['Driver'] == drv2]
+    d1 = df[df['Driver'] == drv1] if 'Driver' in df.columns else pd.DataFrame()
+    d2 = df[df['Driver'] == drv2] if 'Driver' in df.columns else pd.DataFrame()
+    
     if d1.empty or d2.empty: 
         return "<p style='color: #666; font-size: 13px;'>Incomplete driver vectors.</p>"
         
-    vmax1, vmax2 = d1['Speed'].max(), d2['Speed'].max()
-    brake_zones1 = len(d1[d1['Brake'] > 0])
-    brake_zones2 = len(d2[d2['Brake'] > 0])
+    vmax1 = d1['Speed'].max() if 'Speed' in d1.columns else 0
+    vmax2 = d2['Speed'].max() if 'Speed' in d2.columns else 0
+    brake_zones1 = len(d1[d1['Brake'] > 0]) if 'Brake' in d1.columns else 0
+    brake_zones2 = len(d2[d2['Brake'] > 0]) if 'Brake' in d2.columns else 0
     
     vmax_diff = abs(vmax1 - vmax2)
     faster_drv = drv1 if vmax1 >= vmax2 else drv2
@@ -286,12 +282,12 @@ def generate_ai_insights(df, drv1, drv2):
     """
 
 # =========================================================
-# 6. Main Layout (Three Columns)
+# 6. Main Layout (Three Scrollable Columns)
 # =========================================================
 df_files = get_file_index()
 col_left, col_mid, col_right = st.columns([1.2, 3.0, 1.6], gap="large")
 
-# ----------------- LEFT: Controls -----------------
+# --- Left Column: Controls ---
 with col_left:
     with st.container(height=800, border=False):
         if not df_files.empty:
@@ -308,7 +304,14 @@ with col_left:
             filename = file_row.iloc[0].filename if not file_row.empty else None
             df = load_telemetry(filename) if filename else pd.DataFrame()
             
-            drivers = sorted(df.Driver.dropna().unique()) if "Driver" in df.columns else []
+            # 安全擷取 Driver 欄位，徹底防止 DataFrame 沒有 .unique() 的問題
+            if "Driver" in df.columns:
+                driver_series = df["Driver"]
+                if isinstance(driver_series, pd.DataFrame):
+                    driver_series = driver_series.iloc[:, 0]
+                drivers = sorted([str(x) for x in driver_series.dropna().unique()])
+            else:
+                drivers = []
 
             st.markdown("<hr style='border-color: rgba(255,255,255,0.05); margin: 25px 0;'>", unsafe_allow_html=True)
             
@@ -317,7 +320,7 @@ with col_left:
         else:
             df, driver1, driver2 = pd.DataFrame(), "VER", "LEC"
 
-# ----------------- MIDDLE: Telemetry Charts -----------------
+# --- Middle Column: Telemetry Charts ---
 with col_mid:
     with st.container(height=800, border=False):
         if df.empty or "Driver" not in df.columns:
@@ -331,23 +334,23 @@ with col_mid:
             else:
                 d1['Delta'] = 0.0
                 
-            c1 = get_team_color(d1.Team.iloc[0]) if not d1.empty else "#fff"
-            c2 = get_team_color(d2.Team.iloc[0]) if not d2.empty else "#fff"
+            c1 = get_team_color(d1.Team.iloc[0]) if not d1.empty and 'Team' in d1.columns else "#3671C6"
+            c2 = get_team_color(d2.Team.iloc[0]) if not d2.empty and 'Team' in d2.columns else "#F91536"
 
             fig = make_subplots(
                 rows=6, cols=1, shared_xaxes=True, vertical_spacing=0.015,
                 subplot_titles=("Delta Time (s)", "Speed (km/h)", "Throttle (%)", "Brake", "RPM", "Gear")
             )
             
-            # Delta trace
-            if 'Delta' in d1.columns:
+            # Delta Trace
+            if 'Delta' in d1.columns and not d1['Delta'].isna().all():
                 fig.add_trace(go.Scattergl(
                     x=d1['Distance'], y=d1['Delta'], mode="lines",
                     name="Delta", line=dict(color=c1, width=1.5), fill='tozeroy', fillcolor=f"{c1}33",
                     hovertemplate=f"<b>{driver1} Relative</b>: %{{y:+.3f}}s<extra></extra>"
                 ), row=1, col=1)
 
-            # Telemetry traces
+            # Telemetry Traces
             metrics = [("Speed", 2, "solid"), ("Throttle", 3, "solid"), ("Brake", 4, "dot"), ("RPM", 5, "solid"), ("Gear", 6, "solid")]
             for drv, d_drv, c_drv in [(driver1, d1, c1), (driver2, d2, c2)]:
                 if d_drv.empty: continue
@@ -360,7 +363,7 @@ with col_mid:
                         hovertemplate=f"<b>{drv}</b>: %{{y}}<extra></extra>"
                     ), row=row, col=1)
 
-            # Locked layout with spike lines
+            # Fixed scale with cursor tracking
             fig.update_layout(
                 height=780, margin=dict(l=25, r=15, t=30, b=10),
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
@@ -385,14 +388,13 @@ with col_mid:
 
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-# ----------------- RIGHT: Track & AI -----------------
+# --- Right Column: Track Map & AI Analysis ---
 with col_right:
     with st.container(height=800, border=False):
-        # Track Map
         st.markdown('<p style="font-size: 11px; color: #e10600; letter-spacing: 0.15em; font-weight: 700; margin-bottom: -15px;">TRACK TOPOLOGY</p>', unsafe_allow_html=True)
         if not df.empty and {"X", "Y"}.issubset(df.columns):
             track = df[df.Driver == driver1] if "Driver" in df.columns else df
-            if not track.empty:
+            if not track.empty and "Distance" in track.columns:
                 max_d = track["Distance"].max()
                 s1_lim, s2_lim = max_d * 0.32, max_d * 0.70
                 
@@ -417,6 +419,5 @@ with col_right:
 
         st.markdown("<hr style='border-color: rgba(255,255,255,0.08); margin: 20px 0;'>", unsafe_allow_html=True)
 
-        # AI Analysis
         st.markdown('<p style="font-size: 11px; color: #e10600; letter-spacing: 0.15em; font-weight: 700; margin-bottom: 12px;">AI TELEMETRY ANALYSIS</p>', unsafe_allow_html=True)
         st.markdown(generate_ai_insights(df, driver1, driver2), unsafe_allow_html=True)
