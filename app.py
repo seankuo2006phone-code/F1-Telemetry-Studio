@@ -1,442 +1,660 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from huggingface_hub import list_repo_files
-import warnings
+import React, { useEffect, useMemo } from 'react';
+import './App.css';
+import { create } from 'zustand';
+import Plot from 'react-plotly.js';
 
-# 忽略 pandas 或繪圖的無關警告
-warnings.filterwarnings('ignore')
+const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
-# =========================================================
-# 1. 頁面設定 & 極致無邊框 F1 專業版 CSS
-# =========================================================
-st.set_page_config(
-    page_title="F1 Telemetry Studio Pro",
-    page_icon="🏎️",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+const SESSION_MAP: Record<string, string> = {
+  "R": "Race", "Q": "Qualifying", "S": "Sprint", "SQ": "Sprint Shootout",
+  "FP1": "Free Practice 1", "FP2": "Free Practice 2", "FP3": "Free Practice 3"
+};
 
-REPO_ID = "SeanKuo2006/F1-Telemetry-Data"
+const DRIVER_MAP: Record<string, string> = {
+  "VER": "Max Verstappen", "PER": "Sergio Perez", "HAM": "Lewis Hamilton", "RUS": "George Russell",
+  "LEC": "Charles Leclerc", "SAI": "Carlos Sainz", "NOR": "Lando Norris", "PIA": "Oscar Piastri",
+  "ALO": "Fernando Alonso", "STR": "Lance Stroll", "GAS": "Pierre Gasly", "OCO": "Esteban Ocon",
+  "ALB": "Alexander Albon", "SAR": "Logan Sargeant", "TSU": "Yuki Tsunoda", "RIC": "Daniel Ricciardo",
+  "HUL": "Nico Hulkenberg", "MAG": "Kevin Magnussen", "BOT": "Valtteri Bottas", "ZHO": "Guanyu Zhou"
+};
 
-custom_css = """
-<style>
-/* 隱藏預設的 Header, Footer 與 Menu */
-#MainMenu, footer, header { visibility: hidden !important; }
+const TEAM_COLORS: Record<string, string> = {
+  "red bull": "#3671C6", "ferrari": "#E10600", "mercedes": "#6CD3BF", "mclaren": "#F58020",
+  "aston martin": "#229971", "alpine": "#2293D1", "williams": "#37BEDD", "alphatauri": "#5E8FAA",
+  "alfa romeo": "#C92D4B", "haas": "#B6BABD", "rb": "#6692FF", "sauber": "#52E252", 
+  "renault": "#FFF500", "racing point": "#F596C8", "toro rosso": "#469BFF", "unknown": "#FFFFFF"
+};
 
-/* 強制滿版與純黑背景 */
-.block-container {
-    padding: 1rem 2rem !important;
-    max-width: 100% !important;
-    background-color: #000000 !important;
-}
-.stApp {
-    background-color: #000000 !important;
-    color: #ffffff !important;
-}
+const getTeamColor = (team: string) => {
+  if (!team) return "#FFFFFF";
+  const t = team.toLowerCase();
+  for (const [key, color] of Object.entries(TEAM_COLORS)) {
+    if (t.includes(key)) return color;
+  }
+  return "#FFFFFF";
+};
 
-/* 頂部 F1 標誌性紅色警示邊條 */
-header::before {
-    content: "";
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 4px;
-    background-color: #e10600;
-    z-index: 99999;
+interface TelemetryData {
+  Driver: string; Team: string; Distance: number[]; Speed: number[];
+  Throttle: number[]; Brake: number[]; RPM: number[]; nGear: number[];
+  DRS: number[]; X: number[]; Y: number[]; Sector: number[];
 }
 
-/* 隱藏 Markdown 標題旁邊的連結圖標 */
-h1 a, h2 a, h3 a, h4 a, h5 a, h6 a { display: none !important; }
-
-/* ---------------------------------------------------
-   極致無邊框選單：強制把 Streamlit 複雜的底層背景徹底挖空
---------------------------------------------------- */
-div[data-testid="stSelectbox"] {
-    background-color: transparent !important;
-}
-div[data-baseweb="select"] {
-    background-color: transparent !important;
-}
-div[data-baseweb="select"] > div {
-    background-color: transparent !important;
-    border: none !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    transition: border-color 0.2s ease-in-out;
-}
-div[data-baseweb="select"] > div:hover, 
-div[data-baseweb="select"] > div:focus-within {
-    border-bottom: 1px solid #e10600 !important;
-}
-div[data-baseweb="select"] span { color: #ffffff !important; font-size: 14px !important; }
-div[data-baseweb="select"] svg { fill: #ffffff !important; }
-
-/* 選單下拉列表的深色覆蓋 */
-div[data-baseweb="popover"] > div {
-    background-color: #15151e !important;
-    border: 1px solid #333 !important;
-    border-radius: 4px !important;
-}
-ul[data-testid="stSelectboxVirtualDropdown"] li {
-    background-color: transparent !important;
-    color: #ffffff !important;
-}
-ul[data-testid="stSelectboxVirtualDropdown"] li:hover {
-    background-color: #e10600 !important;
+interface StoreState {
+  menuOptions: Record<string, Record<string, string[]>>;
+  year: string; eventName: string; session: string;
+  driver1: string; driver2: string;
+  data1: TelemetryData | null; data2: TelemetryData | null;
+  aiInsights: string[] | null;
+  loading: boolean; cursorDist: number | null; cursorRatio: number | null;
+  setCursor: (dist: number | null, ratio: number | null) => void;
+  updateParams: (params: Partial<StoreState>) => void;
+  fetchOptions: () => Promise<void>;
+  fetchData: () => Promise<void>;
 }
 
-/* 選單標題文字 (Year, Grand Prix...) */
-div[data-testid="stSelectbox"] label p {
-    color: #6b7280 !important;
-    font-size: 10px !important;
-    letter-spacing: 0.2em !important;
-    font-weight: 600 !important;
-    text-transform: uppercase !important;
-}
+const FALLBACK_OPTIONS: Record<string, Record<string, string[]>> = {
+  "2025": { "Bahrain Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Monaco Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"] },
+  "2024": { "Bahrain Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Chinese Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Monaco Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "British Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Abu Dhabi Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"] },
+  "2023": { "Bahrain Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Monaco Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "British Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"] },
+  "2022": { "Bahrain Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Monaco Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"] },
+  "2021": { "Bahrain Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Abu Dhabi Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"] },
+  "2020": { "Austrian Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Italian Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"] },
+  "2019": { "Australian Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Monaco Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"] },
+  "2018": { "Australian Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Monaco Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"], "Japanese Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"] }
+};
 
-/* 獨立區塊自訂捲軸樣式 (隱形且俐落的科技感) */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #e10600; }
-</style>
-"""
-st.markdown(custom_css, unsafe_allow_html=True)
+const useStore = create<StoreState>((set, get) => ({
+  menuOptions: FALLBACK_OPTIONS,
+  year: '2024', eventName: 'Bahrain Grand Prix', session: 'Q',
+  driver1: 'VER', driver2: 'LEC',
+  data1: null, data2: null, aiInsights: null, loading: false, cursorDist: null, cursorRatio: null,
+  setCursor: (dist, ratio) => set({ cursorDist: dist, cursorRatio: ratio }),
+  
+  updateParams: (params) => {
+    set({ ...params });
+    get().fetchData();
+  },
+  
+  fetchOptions: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/options`);
+      if (!res.ok) throw new Error("API options failed");
+      const options = await res.json();
+      if (options && Object.keys(options).length > 0) {
+        set({ menuOptions: options });
+      }
+    } catch (e) { 
+      console.warn("Using fallback options due to API error"); 
+    }
+  },
 
-# =========================================================
-# 2. F1 官方頂部列 (Logo + 導覽連結 + 登入/訂閱)
-# =========================================================
-st.markdown("""
-<div style="display: flex; justify-content: space-between; align-items: center; background-color: #15151e; padding: 12px 24px; border-bottom: 1px solid rgba(255,255,255,0.05); margin: -2rem -2rem 1.5rem -2rem;">
-    <div style="display: flex; align-items: center; gap: 35px;">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/3/33/F1.svg" alt="F1 Logo" style="height: 24px; width: auto;" />
-        <div style="display: flex; gap: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #fff; letter-spacing: 0.1em;">
-            <a href="https://www.formula1.com/en/racing/2024.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8; transition: 0.2s;">Schedule</a>
-            <a href="https://www.formula1.com/en/results.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8; transition: 0.2s;">Results</a>
-            <a href="https://www.formula1.com/en/results.html/team.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8; transition: 0.2s;">Standings</a>
-            <a href="https://www.formula1.com/en/drivers.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8; transition: 0.2s;">Drivers</a>
+  fetchData: async () => {
+    set({ loading: true, data1: null, data2: null, aiInsights: null });
+    const { year, eventName, session, driver1, driver2 } = get();
+    try {
+      const baseUrl = `${API_BASE}/api/telemetry?year=${year}&event_name=${encodeURIComponent(eventName)}&session_type=${session}`;
+      const aiUrl = `${API_BASE}/api/ai_analysis?year=${year}&event_name=${encodeURIComponent(eventName)}&session_type=${session}&driver1=${driver1}&driver2=${driver2}`;
+      
+      const [res1, res2, resAi] = await Promise.all([
+        fetch(`${baseUrl}&driver=${driver1}`),
+        fetch(`${baseUrl}&driver=${driver2}`),
+        fetch(aiUrl)
+      ]);
+
+      const d1 = res1.ok ? await res1.json() : null;
+      const d2 = res2.ok ? await res2.json() : null;
+      const ai = resAi.ok ? await resAi.json() : null;
+
+      if (d1 && !d1.error) set({ data1: d1 });
+      if (d2 && !d2.error) set({ data2: d2 });
+      if (ai && ai.insights) set({ aiInsights: ai.insights });
+    } catch (error) { 
+      console.error("Fetch error:", error); 
+    } finally { 
+      set({ loading: false }); 
+    }
+  }
+}));
+
+const DeltaChart = () => {
+  const { data1, data2, cursorDist, cursorRatio, setCursor } = useStore();
+  
+  const deltaData = useMemo(() => {
+    // 🌟 嚴格檢查：如果資料不完整或缺少 Distance / Speed，直接回傳 null 避免崩潰
+    if (!data1 || !data2 || !data1.Distance || !data1.Speed || !data2.Distance || !data2.Speed) return null;
+    
+    const calcTimeArray = (dist: number[], speedKmh: number[]) => {
+      if (!dist || !speedKmh || dist.length === 0) return new Float32Array(0);
+      const time = new Float32Array(dist.length);
+      time[0] = 0;
+      for (let i = 1; i < dist.length; i++) {
+        const dDist = dist[i] - dist[i-1];
+        const vKmh = (speedKmh[i] + speedKmh[i-1]) / 2;
+        const vMs = Math.max(vKmh / 3.6, 0.1); 
+        time[i] = time[i-1] + (dDist / vMs);
+      }
+      return time;
+    };
+
+    const t1 = calcTimeArray(data1.Distance, data1.Speed);
+    const t2 = calcTimeArray(data2.Distance, data2.Speed);
+    if (t1.length === 0 || t2.length === 0) return null;
+
+    const delta = new Float32Array(data1.Distance.length);
+
+    let j = 0;
+    for (let i = 0; i < data1.Distance.length; i++) {
+      const targetD = data1.Distance[i];
+      
+      while (j < data2.Distance.length - 1 && data2.Distance[j+1] < targetD) {
+        j++;
+      }
+      
+      if (j >= data2.Distance.length - 1) {
+        delta[i] = delta[i-1] || 0;
+        continue;
+      }
+
+      const d0 = data2.Distance[j];
+      const d1_t = data2.Distance[j+1];
+      const time0 = t2[j];
+      const time1_t = t2[j+1];
+      
+      let interpT2 = time0;
+      if (d1_t > d0) {
+        interpT2 = time0 + ((targetD - d0) / (d1_t - d0)) * (time1_t - time0);
+      }
+      
+      delta[i] = t1[i] - interpT2;
+    }
+    return Array.from(delta);
+  }, [data1, data2]);
+
+  if (!data1 || !data2 || !deltaData) return null;
+
+  let val1 = '-';
+  let distVal = '-';
+  let idx = -1;
+
+  if (cursorDist !== null && data1.Distance) {
+    idx = data1.Distance.findIndex(d => d >= cursorDist);
+    if (idx !== -1) {
+      const dVal = deltaData[idx];
+      val1 = (dVal > 0 ? "+" : "") + dVal.toFixed(3) + 's';
+      distVal = `${data1.Distance[idx].toFixed(0)}m`;
+    }
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!data1 || !data1.Distance) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const plotWidth = rect.width - 45;
+    const mouseX = e.clientX - rect.left - 35;
+    const ratio = Math.max(0, Math.min(1, mouseX / plotWidth));
+    const maxDist = data1.Distance[data1.Distance.length - 1];
+    const targetDist = ratio * maxDist;
+
+    let closest = data1.Distance[0];
+    let minDist = Math.abs(closest - targetDist);
+    for (let i = 0; i < data1.Distance.length; i++) {
+      const diff = Math.abs(data1.Distance[i] - targetDist);
+      if (diff < minDist) {
+        minDist = diff;
+        closest = data1.Distance[i];
+      }
+    }
+    setCursor(closest, ratio);
+  };
+
+  const chartData: any[] = [
+    { 
+      x: data1.Distance, y: deltaData, type: 'scatter', mode: 'lines', fill: 'tozeroy',
+      line: { color: getTeamColor(data1.Team), width: 1.5 }, 
+      fillcolor: getTeamColor(data1.Team) + '33', 
+      hoverinfo: 'skip'
+    }
+  ];
+
+  return (
+    <div className="relative mb-6 cursor-crosshair shrink-0" onMouseMove={handleMouseMove} onMouseLeave={() => setCursor(null, null)}>
+      <div className="flex justify-between items-center px-2 mb-0.5 pointer-events-none">
+        <h2 className="text-[10px] font-medium tracking-[0.2em] text-gray-500 uppercase">Delta Time (s)</h2>
+      </div>
+
+      {cursorRatio !== null && idx !== -1 && (
+        <div className="absolute top-5 z-20 pointer-events-none font-mono text-[10px] flex flex-col gap-0.5 pl-2 whitespace-nowrap" style={{ left: `calc(35px + ${cursorRatio} * (100% - 45px))` }}>
+          <span className="text-gray-400 text-[9px] drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{distVal}</span>
+          <span style={{ color: getTeamColor(data1.Team) }} className="drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+            {data1.Driver} Relative: {val1}
+          </span>
         </div>
+      )}
+      
+      <Plot
+        data={chartData}
+        layout={{
+          height: 200, margin: { l: 35, r: 10, t: 5, b: 15 },
+          paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+          xaxis: { showgrid: true, gridcolor: '#121212', zeroline: false, showline: false, tickfont: { color: '#666', size: 10 } },
+          yaxis: { showgrid: true, gridcolor: '#121212', zeroline: true, zerolinecolor: '#444', showline: false, tickfont: { color: '#666', size: 10 } },
+          hovermode: false, showlegend: false,
+          shapes: cursorDist !== null ? [{ 
+            type: 'line', x0: cursorDist, x1: cursorDist, y0: 0, y1: 1, yref: 'paper', 
+            line: { color: '#E10600', width: 1, dash: 'dash' }
+          }] : []
+        }}
+        config={{ displayModeBar: false, staticPlot: true }} style={{ width: '100%' }}
+      />
     </div>
-    <div style="display: flex; align-items: center; gap: 15px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
-        <a href="https://account.formula1.com" target="_blank" style="color: #d1d5db; text-decoration: none; opacity: 0.8;">Sign In</a>
-        <a href="https://f1tv.formula1.com/" target="_blank" style="background-color: #e10600; color: white; padding: 6px 14px; border-radius: 2px; text-decoration: none; box-shadow: 0 2px 4px rgba(225,6,0,0.3);">Subscribe</a>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+  );
+};
 
-col_title, col_live = st.columns([4, 1])
-with col_title:
-    st.markdown('<h1 style="font-size: 16px; font-weight: 300; letter-spacing: 0.2em; margin: 0;">TELEMETRY STUDIO <span style="background-color: #e10600; font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 10px; color: white;">PRO v2</span></h1>', unsafe_allow_html=True)
-with col_live:
-    st.markdown('<div style="text-align: right; font-size: 10px; font-family: monospace; color: #9ca3af; padding-top: 3px;">LIVE SYNC <span style="display: inline-block; width: 8px; height: 8px; background-color: #e10600; border-radius: 50%; margin-left: 5px; box-shadow: 0 0 5px #e10600;"></span></div>', unsafe_allow_html=True)
+const TelemetryChart = ({ title, metric, yRange, isBrake = false }: { title: string, metric: keyof TelemetryData, yRange?: number[], isBrake?: boolean }) => {
+  const { data1, data2, cursorDist, cursorRatio, setCursor } = useStore();
+  if (!data1) return null;
 
-st.markdown("<hr style='border-color: rgba(255,255,255,0.05); margin: 12px 0 20px 0;'>", unsafe_allow_html=True)
+  let val1 = '-';
+  let val2 = '-';
+  let distVal = '-';
+  let idx = -1;
 
-# =========================================================
-# 3. 核心資料與快取功能 (包含強悍防呆機制)
-# =========================================================
-TEAM_COLORS = {
-    "red bull": "#3671C6", "ferrari": "#F91536", "mercedes": "#6CD3BF", "mclaren": "#F58020",
-    "aston martin": "#229971", "alpine": '#2293D1', "williams": "#37BEDD", "alphatauri": "#5E8FAA",
-    "alfa romeo": "#C92D4B", "haas": "#B6BABD", "rb": "#6692FF", "racing bulls": "#6692FF",
-    "sauber": "#52E252", "kick sauber": "#52E252"
-}
+  if (cursorDist !== null) {
+    idx = data1.Distance.findIndex(d => d >= cursorDist);
+    if (idx !== -1) {
+      const raw1 = data1[metric][idx];
+      val1 = typeof raw1 === 'number' ? raw1.toFixed(1) : String(raw1);
+      if (data2 && data2[metric]) {
+        const raw2 = data2[metric][idx];
+        val2 = typeof raw2 === 'number' ? raw2.toFixed(1) : String(raw2);
+      }
+      distVal = `${data1.Distance[idx].toFixed(0)}m`;
+    }
+  }
 
-SESSION_NAMES = {
-    "R": "Race", "Q": "Qualifying", "S": "Sprint", "SQ": "Sprint Shootout",
-    "FP1": "Free Practice 1", "FP2": "Free Practice 2", "FP3": "Free Practice 3"
-}
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const plotWidth = rect.width - 45;
+    const mouseX = e.clientX - rect.left - 35;
+    const ratio = Math.max(0, Math.min(1, mouseX / plotWidth));
+    const maxDist = data1.Distance[data1.Distance.length - 1];
+    const targetDist = ratio * maxDist;
 
-def get_team_color(team: str) -> str:
-    team = str(team).lower()
-    return next((v for k, v in TEAM_COLORS.items() if k in team), "#FFFFFF")
+    let closest = data1.Distance[0];
+    let minDist = Math.abs(closest - targetDist);
+    for (let i = 0; i < data1.Distance.length; i++) {
+      const diff = Math.abs(data1.Distance[i] - targetDist);
+      if (diff < minDist) {
+        minDist = diff;
+        closest = data1.Distance[i];
+      }
+    }
+    setCursor(closest, ratio);
+  };
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_file_index() -> pd.DataFrame:
-    try:
-        files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
-    except Exception as e:
-        st.error(f"Failed to fetch dataset index: {e}")
-        return pd.DataFrame(columns=["year", "event", "session", "filename"])
-    
-    rows = []
-    for f in files:
-        if not f.endswith(".parquet"): continue
-        parts = f[:-8].split("_")
-        if len(parts) < 3: continue
-        rows.append({"year": int(parts[0]), "event": "_".join(parts[1:-1]), "session": parts[-1], "filename": f})
-    
-    df_files = pd.DataFrame(rows)
-    if not df_files.empty:
-        df_files = df_files.sort_values(by=["year", "event", "session"], ascending=[False, True, True])
-    return df_files
+  const chartData: any[] = [
+    { 
+      x: data1.Distance, y: data1[metric] as number[], type: 'scatter', mode: 'lines', 
+      line: { color: getTeamColor(data1.Team), width: 1.5, dash: isBrake ? 'dot' : 'solid' }, 
+      hoverinfo: 'skip'
+    }
+  ];
 
-@st.cache_data(show_spinner=False)
-def load_telemetry(filename: str) -> pd.DataFrame:
-    path = f"hf://datasets/{REPO_ID}/{filename}"
-    try:
-        df_loaded = pd.read_parquet(path)
-        
-        # 強悍的欄位名稱自動對齊邏輯 (過濾任何前後空白或大小寫干擾)
-        rename_map = {}
-        for col in df_loaded.columns:
-            cl = str(col).strip().lower()
-            if 'distance' in cl and 'ahead' not in cl and 'relative' not in cl: rename_map[col] = 'Distance'
-            elif cl == 'speed': rename_map[col] = 'Speed'
-            elif cl == 'throttle': rename_map[col] = 'Throttle'
-            elif cl == 'brake': rename_map[col] = 'Brake'
-            elif cl == 'rpm': rename_map[col] = 'RPM'
-            elif cl == 'ngear' or cl == 'gear': rename_map[col] = 'Gear'
-            elif cl == 'drs': rename_map[col] = 'DRS'
-            elif 'driver' in cl and 'ahead' not in cl: rename_map[col] = 'Driver'
-            elif cl == 'team': rename_map[col] = 'Team'
-            elif cl == 'x': rename_map[col] = 'X'
-            elif cl == 'y': rename_map[col] = 'Y'
-            elif cl == 'time' or cl == 'sessiontime': rename_map[col] = 'Time'
-            
-        df_loaded.rename(columns=rename_map, inplace=True)
-        
-        # 若資料集缺乏 Driver 欄位，給予預設值以防崩潰
-        if 'Driver' not in df_loaded.columns:
-            df_loaded['Driver'] = 'UNKNOWN'
-            
-        # 若資料集缺乏 Distance 欄位，嘗試用 Time 或行號補齊 X 軸
-        if 'Distance' not in df_loaded.columns:
-            if 'Time' in df_loaded.columns:
-                df_loaded['Distance'] = range(len(df_loaded)) # Fallback index
-            else:
-                df_loaded['Distance'] = range(len(df_loaded))
-                
-        # 強制將 Brake 轉換為數值 (因為部分 FastF1 輸出會是 True/False 或 NaN)
-        if 'Brake' in df_loaded.columns:
-            df_loaded['Brake'] = pd.to_numeric(df_loaded['Brake'], errors='coerce').fillna(0).astype(int)
-            
-        return df_loaded
-    except Exception as e:
-        st.error(f"Error decoding telemetry array: {str(e)}")
-        return pd.DataFrame()
+  if (data2 && data2.Distance) {
+    chartData.push({ 
+      x: data2.Distance, y: data2[metric] as number[], type: 'scatter', mode: 'lines', 
+      line: { color: getTeamColor(data2.Team), width: 1.5, dash: isBrake ? 'dot' : 'solid' }, 
+      hoverinfo: 'skip'
+    });
+  }
 
-df_files = get_file_index()
+  return (
+    <div 
+      className="relative mb-6 cursor-crosshair shrink-0" 
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setCursor(null, null)}
+    >
+      <div className="flex justify-between items-center px-2 mb-0.5 pointer-events-none">
+        <h2 className="text-[10px] font-medium tracking-[0.2em] text-gray-500 uppercase">{title}</h2>
+      </div>
 
-# =========================================================
-# 4. 高階 AI 分析引擎 (生成進階賽道見解)
-# =========================================================
-def generate_advanced_ai_insights(df, drv1, drv2):
-    if df.empty or "Speed" not in df.columns or "Brake" not in df.columns:
-        return "<p style='color: #666; font-size: 13px;'>Awaiting valid telemetry packets...</p>"
-        
-    d1 = df[df['Driver'] == drv1]
-    d2 = df[df['Driver'] == drv2] if drv1 != drv2 else d1
-    
-    if d1.empty or d2.empty:
-        return "<p style='color: #666; font-size: 13px;'>Incomplete driver vectors detected.</p>"
-        
-    # 分析極速與油門特性
-    vmax1, vmax2 = d1['Speed'].max(), d2['Speed'].max()
-    throttle_avg1 = d1['Throttle'].mean() if 'Throttle' in d1.columns else 0
-    throttle_avg2 = d2['Throttle'].mean() if 'Throttle' in d2.columns else 0
-    
-    # 計算重煞車區域 (Brake == 1 的次數/比例)
-    brake_zones1 = len(d1[d1['Brake'] > 0])
-    brake_zones2 = len(d2[d2['Brake'] > 0])
-    
-    vmax_diff = abs(vmax1 - vmax2)
-    faster_drv = drv1 if vmax1 >= vmax2 else drv2
-    
-    # 建立動態分析文本
-    insight_html = f"""
-    <div style="background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%); padding: 18px; border-radius: 6px; border-left: 3px solid #e10600; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-        <p style="font-size: 11px; color: #888; margin-bottom: 8px; font-family: monospace;">[NEURAL DIAGNOSTICS v2.4 ONLINE]</p>
-        <p style="font-size: 13px; color: #eee; margin-bottom: 12px; line-height: 1.6;">
-            Kinematic scan complete. <b>{faster_drv}</b> exhibits a distinct aerodynamic efficiency advantage, logging a V-Max surplus of <span style="color: #e10600; font-weight: bold;">+{vmax_diff:.1f} km/h</span> on primary straights.
-        </p>
-        <div style="display: flex; justify-content: space-between; border-top: 1px solid #333; border-bottom: 1px solid #333; padding: 8px 0; margin-bottom: 12px;">
-            <div style="width: 48%;">
-                <span style="font-size: 10px; color: #999; display: block;">{drv1} V-MAX</span>
-                <span style="font-size: 16px; color: #fff; font-weight: bold; font-family: monospace;">{vmax1:.0f} <span style="font-size: 10px;">km/h</span></span>
-            </div>
-            <div style="width: 48%;">
-                <span style="font-size: 10px; color: #999; display: block;">{drv2} V-MAX</span>
-                <span style="font-size: 16px; color: #fff; font-weight: bold; font-family: monospace;">{vmax2:.0f} <span style="font-size: 10px;">km/h</span></span>
-            </div>
+      {cursorRatio !== null && idx !== -1 && (
+        <div 
+          className="absolute top-5 z-20 pointer-events-none font-mono text-[10px] flex flex-col gap-0.5 pl-2 whitespace-nowrap"
+          style={{ left: `calc(35px + ${cursorRatio} * (100% - 45px))` }}
+        >
+          <span className="text-gray-400 text-[9px] drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+            {distVal}
+          </span>
+          <span style={{ color: getTeamColor(data1.Team) }} className="drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+            {data1.Driver}: {val1}
+          </span>
+          {data2 && (
+            <span style={{ color: getTeamColor(data2.Team) }} className="drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+              {data2.Driver}: {val2}
+            </span>
+          )}
         </div>
-        <ul style="font-size: 12px; color: #bbb; padding-left: 16px; margin-bottom: 0; line-height: 1.5;">
-            <li><b>Throttle Profile:</b> {drv1} commits to full throttle {throttle_avg1:.1f}% of the lap compared to {drv2}'s {throttle_avg2:.1f}%, indicating setup divergence in traction zones.</li>
-            <li><b>Brake Trace:</b> Telemetry signatures show {drv1} utilizing {brake_zones1} distinct deceleration inputs vs {drv2}'s {brake_zones2}, revealing differing trail-braking techniques.</li>
-        </ul>
+      )}
+      
+      <Plot
+        data={chartData}
+        layout={{
+          height: 200, margin: { l: 35, r: 10, t: 5, b: 15 },
+          paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+          xaxis: { showgrid: true, gridcolor: '#121212', zeroline: false, showline: false, tickfont: { color: '#666', size: 10 } },
+          yaxis: { showgrid: true, gridcolor: '#121212', zeroline: false, showline: false, tickfont: { color: '#666', size: 10 }, range: yRange },
+          hovermode: false,
+          showlegend: false,
+          shapes: cursorDist !== null ? [{ 
+            type: 'line', x0: cursorDist, x1: cursorDist, y0: 0, y1: 1, yref: 'paper', 
+            line: { color: '#E10600', width: 1, dash: 'dash' }
+          }] : []
+        }}
+        config={{ displayModeBar: false, staticPlot: true }} style={{ width: '100%' }}
+      />
     </div>
-    """
-    return insight_html
+  );
+};
 
-# =========================================================
-# 5. 三大獨立滑動區塊配置 (st.container 限定高度)
-# =========================================================
-col_left, col_mid, col_right = st.columns([1.2, 2.6, 1.8], gap="medium")
+const TrackMap = () => {
+  const { data1, data2, cursorDist } = useStore();
+  if (!data1 || !data1.X || data1.X.length === 0) return null;
 
-# ----------------- 區塊 1: 控制選單 (Left) -----------------
-with col_left:
-    with st.container(height=850, border=False):
-        if not df_files.empty:
-            years = sorted(df_files.year.unique(), reverse=True)
-            year = st.selectbox("Year", years, index=0 if 2024 in years else 0)
+  const maxDist = data1.Distance[data1.Distance.length - 1] || 1;
+  const s1Limit = maxDist * 0.32;
+  const s2Limit = maxDist * 0.70;
 
-            events = sorted(df_files[df_files.year == year].event.unique())
-            event = st.selectbox("Grand Prix", events, index=0)
+  const s1 = { x: [] as number[], y: [] as number[] };
+  const s2 = { x: [] as number[], y: [] as number[] };
+  const s3 = { x: [] as number[], y: [] as number[] };
 
-            sessions = df_files[(df_files.year == year) & (df_files.event == event)].session.unique()
-            session = st.selectbox("Session", sessions, format_func=lambda x: SESSION_NAMES.get(x, x), index=0)
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
 
-            file_row = df_files[(df_files.year == year) & (df_files.event == event) & (df_files.session == session)]
-            filename = file_row.iloc[0].filename if not file_row.empty else None
-            
-            df = load_telemetry(filename) if filename else pd.DataFrame()
-            drivers = sorted(df.Driver.dropna().unique()) if "Driver" in df.columns else []
+  for (let i = 0; i < data1.Distance.length; i++) {
+    const d = data1.Distance[i];
+    const px = data1.X[i];
+    const py = data1.Y[i];
 
-            st.markdown("<hr style='border-color: rgba(255,255,255,0.05); margin: 25px 0;'>", unsafe_allow_html=True)
-            
-            driver1 = st.selectbox("Driver 1", drivers, index=drivers.index("VER") if "VER" in drivers else (0 if drivers else 0))
-            driver2 = st.selectbox("Driver 2", drivers, index=drivers.index("LEC") if "LEC" in drivers else (1 if len(drivers) > 1 else 0))
-            
-            # 渲染左側專屬的車手摘要卡片 (讓左側不單調)
-            if not df.empty and drivers:
-                c_team1 = get_team_color(df[df.Driver == driver1].Team.iloc[0]) if 'Team' in df.columns else "#fff"
-                c_team2 = get_team_color(df[df.Driver == driver2].Team.iloc[0]) if 'Team' in df.columns else "#fff"
-                
-                st.markdown(f"""
-                <div style="margin-top: 25px;">
-                    <p style="font-size: 10px; color: #6b7280; letter-spacing: 0.2em; font-weight: 600; text-transform: uppercase;">Active Telemetry Links</p>
-                    <div style="display: flex; align-items: center; background: #111; padding: 10px; border-left: 3px solid {c_team1}; margin-bottom: 8px;">
-                        <span style="font-family: monospace; font-size: 16px; font-weight: bold; color: #fff; width: 40px;">{driver1}</span>
-                        <span style="font-size: 10px; color: #888; margin-left: auto;">TX / RX: STABLE</span>
-                    </div>
-                    <div style="display: flex; align-items: center; background: #111; padding: 10px; border-left: 3px solid {c_team2};">
-                        <span style="font-family: monospace; font-size: 16px; font-weight: bold; color: #fff; width: 40px;">{driver2}</span>
-                        <span style="font-size: 10px; color: #888; margin-left: auto;">TX / RX: STABLE</span>
-                    </div>
+    if (px < minX) minX = px;
+    if (px > maxX) maxX = px;
+    if (py < minY) minY = py;
+    if (py > maxY) maxY = py;
+
+    if (d <= s1Limit) { s1.x.push(px); s1.y.push(py); }
+    else if (d <= s2Limit) { s2.x.push(px); s2.y.push(py); }
+    else { s3.x.push(px); s3.y.push(py); }
+  }
+
+  if (s2.x.length > 0) { s1.x.push(s2.x[0]); s1.y.push(s2.y[0]); }
+  if (s3.x.length > 0) { s2.x.push(s3.x[0]); s2.y.push(s3.y[0]); }
+
+  const drsPoints = { x: [] as number[], y: [] as number[] };
+  for (let i = 0; i < data1.Distance.length; i++) {
+    if (data1.DRS[i] >= 10) {
+      drsPoints.x.push(data1.X[i]);
+      drsPoints.y.push(data1.Y[i]);
+    }
+  }
+
+  const xPadding = (maxX - minX) * 0.15;
+  const yPadding = (maxY - minY) * 0.15;
+  const xRange = [minX - xPadding, maxX + xPadding];
+  const yRange = [minY - yPadding, maxY + yPadding];
+
+  let cursorPos = null;
+  if (cursorDist !== null) {
+    const idx = data1.Distance.findIndex(d => d >= cursorDist);
+    if (idx !== -1) {
+      cursorPos = { x: [data1.X[idx]], y: [data1.Y[idx]] };
+    }
+  }
+
+  return (
+    <div className="relative w-full h-[550px] bg-transparent flex flex-col">
+      <div className="flex justify-between items-center px-4 absolute top-2 left-0 w-full z-20 pointer-events-none">
+        <h2 className="text-[10px] font-medium tracking-[0.2em] text-gray-500 uppercase drop-shadow-md">Track Map (Sector 1 / 2 / 3)</h2>
+        <div className="text-[9px] font-mono tracking-widest flex gap-3 drop-shadow-md">
+          <span className="text-[#E10600]">■ S1</span>
+          <span className="text-[#00A0E9]">■ S2</span>
+          <span className="text-[#FFD500]">■ S3</span>
+        </div>
+      </div>
+      
+      <div className="flex-1 w-full h-full relative pointer-events-none mt-8">
+        <Plot
+          useResizeHandler={true}
+          data={[
+            { x: s1.x, y: s1.y, type: 'scatter', mode: 'lines', line: { color: '#E10600', width: 4 }, name: 'Sector 1', hoverinfo: 'skip' },
+            { x: s2.x, y: s2.y, type: 'scatter', mode: 'lines', line: { color: '#00A0E9', width: 4 }, name: 'Sector 2', hoverinfo: 'skip' },
+            { x: s3.x, y: s3.y, type: 'scatter', mode: 'lines', line: { color: '#FFD500', width: 4 }, name: 'Sector 3', hoverinfo: 'skip' },
+            { x: drsPoints.x, y: drsPoints.y, type: 'scatter', mode: 'markers', marker: { color: '#00FF00', size: 3, symbol: 'square' }, name: 'DRS', hoverinfo: 'skip' },
+            ...(cursorPos ? [{
+              x: cursorPos.x, y: cursorPos.y, type: 'scatter', mode: 'markers',
+              marker: { color: '#ffffff', size: 10, line: { color: '#15151e', width: 2 } }, name: 'Pos', hoverinfo: 'skip'
+            }] : [])
+          ] as any[]}
+          layout={{
+            autosize: true,
+            margin: { l: 10, r: 10, t: 20, b: 10 },
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: 'transparent',
+            dragmode: false,
+            xaxis: { visible: false, fixedrange: true, range: xRange },
+            yaxis: { visible: false, fixedrange: true, range: yRange, scaleanchor: 'x', scaleratio: 1 },
+            showlegend: false
+          }}
+          config={{ displayModeBar: false, responsive: true }}
+          style={{ width: '100%', height: '100%' }}
+        />
+      </div>
+    </div>
+  );
+};
+
+function App() {
+  const store = useStore();
+
+  useEffect(() => { 
+    store.fetchOptions().then(() => store.fetchData()); 
+  }, []);
+
+  // 🌟 已加上嚴格的型別斷言 (keyof typeof FALLBACK_OPTIONS)，徹底消除 TypeScript 紅字
+  const availableYears = store.menuOptions ? Object.keys(store.menuOptions).sort((a, b) => Number(b) - Number(a)) : Object.keys(FALLBACK_OPTIONS);
+  const eventsObj = (store.menuOptions && store.menuOptions[store.year]) || FALLBACK_OPTIONS[store.year as keyof typeof FALLBACK_OPTIONS] || {};
+  const availableEvents = Object.keys(eventsObj).sort();
+  const availableSessions = eventsObj[store.eventName] || ["FP1", "FP2", "FP3", "Q", "R"];
+
+  const color1 = store.data1 ? getTeamColor(store.data1.Team) : '#3671C6';
+  const color2 = store.data2 ? getTeamColor(store.data2.Team) : '#E10600';
+
+  return (
+    <div className="h-screen overflow-hidden bg-[#000000] text-gray-200 p-4 lg:p-6 font-sans selection:bg-[#E10600] flex flex-col">
+      
+      <header className="-mx-4 lg:-mx-6 -mt-4 lg:-mt-6 mb-6 flex flex-col bg-[#15151e] border-t-[4px] border-[#e10600] shadow-xl shrink-0">
+        <div className="flex items-center justify-between px-6 lg:px-10 py-4 border-b border-white/10">
+          <div className="flex items-center gap-8 lg:gap-12">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/3/33/F1.svg" alt="F1 Official Logo" className="h-6 lg:h-8 w-auto" />
+            <nav className="hidden md:flex gap-6 text-[12px] font-bold uppercase tracking-wider text-white">
+              <a href="https://www.formula1.com/en/racing/2024.html" target="_blank" rel="noopener noreferrer" className="hover:text-[#e10600] transition-colors">Schedule</a>
+              <a href="https://www.formula1.com/en/results.html/2024/races.html" target="_blank" rel="noopener noreferrer" className="hover:text-[#e10600] transition-colors">Results</a>
+              <a href="https://www.formula1.com/en/results.html/2024/team.html" target="_blank" rel="noopener noreferrer" className="hover:text-[#e10600] transition-colors">Standings</a>
+              <a href="https://www.formula1.com/en/drivers.html" target="_blank" rel="noopener noreferrer" className="hover:text-[#e10600] transition-colors">Drivers</a>
+            </nav>
+          </div>
+          
+          <div className="hidden md:flex items-center gap-4 text-[11px] font-bold uppercase tracking-wider">
+            <a href="https://account.formula1.com/#/en/login" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">Sign In</a>
+            <a href="https://f1tv.formula1.com/" target="_blank" rel="noopener noreferrer" className="bg-[#e10600] text-white px-4 py-2 rounded hover:bg-red-700 transition-colors">Subscribe</a>
+          </div>
+        </div>
+
+        {/* 🌟 頂部主標題列與即時 AI HUD 橫向融合 */}
+        <div className="bg-[#000000] px-6 lg:px-10 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <h1 className="text-lg lg:text-xl font-light tracking-[0.2em] text-white flex items-center">
+              TELEMETRY STUDIO
+              <span className="bg-[#e10600] text-white font-bold text-[9px] tracking-widest px-2 py-0.5 rounded ml-3">PRO v2</span>
+            </h1>
+
+            {/* 🌟 即時 AI 資訊條 (直接移到標題旁邊，隨滑鼠位置更新) */}
+            {(() => {
+              let aiData = null;
+              if (store.cursorDist !== null && store.data1 && store.data2) {
+                const idx = store.data1.Distance.findIndex(d => d >= store.cursorDist);
+                if (idx !== -1) {
+                  const speed1 = Number(store.data1.Speed[idx]).toFixed(0);
+                  const thr1 = Number(store.data1.Throttle[idx]).toFixed(0);
+                  const brk1 = store.data1.Brake[idx];
+                  const speed2 = Number(store.data2.Speed[idx]).toFixed(0);
+                  const thr2 = Number(store.data2.Throttle[idx]).toFixed(0);
+                  const brk2 = store.data2.Brake[idx];
+                  const speedDiff = (Number(speed1) - Number(speed2)).toFixed(0);
+                  const sign = Number(speed1) > Number(speed2) ? '+' : '';
+
+                  let insightStr = '';
+                  if (brk1 > 0 && brk2 === 0) insightStr = `🛑 ${store.data2.Driver} Braking Later!`;
+                  else if (brk1 === 0 && brk2 > 0) insightStr = `🛑 ${store.data1.Driver} Braking Later!`;
+                  else if (Number(thr1) >= 99 && Number(thr2) < 99) insightStr = `🟢 ${store.data1.Driver} Earlier Throttle!`;
+                  else if (Number(thr1) < 99 && Number(thr2) >= 99) insightStr = `🟢 ${store.data2.Driver} Earlier Throttle!`;
+                  else if (Math.abs(Number(speed1) - Number(speed2)) > 3) insightStr = `🚀 ${Number(speed1) > Number(speed2) ? store.data1.Driver : store.data2.Driver} Momentum Advantage`;
+                  else insightStr = `⚖️ Matching Pace`;
+
+                  aiData = {
+                    d1Name: store.data1.Driver,
+                    d1Color: getTeamColor(store.data1.Team),
+                    s1: speed1,
+                    t1: thr1,
+                    d2Name: store.data2.Driver,
+                    d2Color: getTeamColor(store.data2.Team),
+                    s2: speed2,
+                    t2: thr2,
+                    delta: `${sign}${speedDiff} km/h`,
+                    insight: insightStr,
+                    dist: store.cursorDist.toFixed(0)
+                  };
+                }
+              }
+
+              return aiData ? (
+                <div className="hidden lg:flex items-center gap-6 bg-[#15151e]/80 border border-white/10 px-4 py-1 rounded font-mono text-[10px]">
+                  <span className="text-gray-500">DIST: {aiData.dist}m</span>
+                  <span style={{ color: aiData.d1Color }} className="font-bold">{aiData.d1Name}: {aiData.s1}km/h (Thr: {aiData.t1}%)</span>
+                  <span style={{ color: aiData.d2Color }} className="font-bold">{aiData.d2Name}: {aiData.s2}km/h (Thr: {aiData.t2}%)</span>
+                  <span className="text-gray-300">Δ: <strong className="text-white">{aiData.delta}</strong></span>
+                  <span className="text-[#e10600] font-sans font-medium">{aiData.insight}</span>
                 </div>
-                """, unsafe_allow_html=True)
-                
-        else:
-            st.selectbox("Year", [2024])
-            st.selectbox("Grand Prix", ["Abu Dhabi"])
-            st.selectbox("Session", ["Qualifying"])
-            driver1, driver2 = "VER", "LEC"
-            df = pd.DataFrame()
+              ) : (
+                <div className="hidden lg:block text-gray-600 font-mono text-[10px]">
+                  [ Hover over telemetry charts for live AI insights ]
+                </div>
+              );
+            })()}
+          </div>
 
-# ----------------- 區塊 2: 遙測數據核心圖表 (Middle) -----------------
-with col_mid:
-    with st.container(height=850, border=False):
-        if df.empty or "Driver" not in df.columns:
-            st.markdown("""
-            <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 600px;">
-                <p style="color: #4b5563; font-size: 14px; font-weight: 500; letter-spacing: 0.2em;">NO TELEMETRY DATA AVAILABLE</p>
-                <p style="color: #333; font-size: 11px;">Verify API endpoint or dataset integrity.</p>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-500 font-mono tracking-widest">LIVE SYNC</span>
+            <span className="w-2 h-2 bg-[#e10600] rounded-full animate-pulse shadow-[0_0_8px_#e10600]"></span>
+          </div>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 flex-1 overflow-hidden">
+        
+        <aside className="xl:col-span-3 flex flex-col space-y-6 h-full overflow-y-auto pr-4 pb-10 custom-scrollbar">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Year</label>
+            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+              <select value={store.year} onChange={e => {
+                  const newYear = e.target.value;
+                  const newEventsObj = store.menuOptions?.[newYear] || FALLBACK_OPTIONS[newYear as keyof typeof FALLBACK_OPTIONS] || {};
+                  const firstEvent = Object.keys(newEventsObj)[0] || "Bahrain Grand Prix";
+                  const firstSession = newEventsObj[firstEvent]?.[0] || "Q";
+                  store.updateParams({ year: newYear, eventName: firstEvent, session: firstSession });
+                }} className="bg-transparent text-white font-normal text-sm outline-none cursor-pointer w-full appearance-none pr-6">
+                {availableYears.map(y => <option key={y} value={y} className="bg-[#15151e] text-white">{y}</option>)}
+              </select>
+              <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
             </div>
-            """, unsafe_allow_html=True)
-        else:
-            selected_drivers = [driver1] if driver1 == driver2 else [driver1, driver2]
-            driver_groups = {k: v for k, v in df.groupby("Driver")}
+          </div>
 
-            # 使用 5 行子圖包含檔位 (Gear) 資訊
-            fig = make_subplots(
-                rows=5, cols=1, shared_xaxes=True, vertical_spacing=0.015,
-                subplot_titles=("Speed (km/h)", "Throttle (%)", "Brake", "RPM", "Gear")
-            )
-            
-            # 定義各子圖對應的物理指標
-            metrics = [
-                ("Speed", 1, "solid"), 
-                ("Throttle", 2, "solid"), 
-                ("Brake", 3, "dot"), 
-                ("RPM", 4, "solid"),
-                ("Gear", 5, "solid")
-            ]
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Grand Prix</label>
+            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+              <select value={store.eventName} onChange={e => {
+                  const newEvent = e.target.value;
+                  const currentEventsObj = store.menuOptions?.[store.year] || FALLBACK_OPTIONS[store.year as keyof typeof FALLBACK_OPTIONS] || {};
+                  const firstSession = currentEventsObj[newEvent]?.[0] || "Q";
+                  store.updateParams({ eventName: newEvent, session: firstSession });
+                }} className="bg-transparent text-white font-normal text-sm outline-none cursor-pointer w-full appearance-none pr-6 truncate">
+                {availableEvents.map(e => <option key={e} value={e} className="bg-[#15151e] text-white">{e}</option>)}
+              </select>
+              <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
+            </div>
+          </div>
 
-            for drv in selected_drivers:
-                d = driver_groups.get(drv)
-                if d is None or d.empty: continue
-                
-                color = get_team_color(d.Team.iloc[0] if "Team" in d.columns else "")
-                x_axis = d["Distance"]
-                
-                for metric, row, dash in metrics:
-                    if metric not in d.columns: continue
-                    y_data = d[metric]
-                    
-                    fig.add_trace(go.Scattergl(
-                        x=x_axis, y=y_data, mode="lines",
-                        name=drv if row == 1 else None, showlegend=(row == 1),
-                        line=dict(color=color, width=1.5, dash=dash),
-                        hovertemplate=f"<b>{drv}</b> : %{{y}}<extra></extra>"
-                    ), row=row, col=1)
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Session</label>
+            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+              <select value={store.session} onChange={e => store.updateParams({ session: e.target.value })} className="bg-transparent text-white font-normal text-sm outline-none cursor-pointer w-full appearance-none pr-6">
+                {availableSessions.map(s => <option key={s} value={s} className="bg-[#15151e] text-white">{SESSION_MAP[s] || s}</option>)}
+              </select>
+              <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
+            </div>
+          </div>
 
-            # 更新排版設定，徹底停用縮放與拖曳，但啟用十字準星追蹤
-            fig.update_layout(
-                height=800, margin=dict(l=35, r=15, t=30, b=20),
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#bbb", size=11)),
-                hovermode='x unified', hoverlabel=dict(bgcolor="#111", font_size=12, font_family="monospace"),
-                dragmode=False, # 絕對禁用拖曳放大
-                font=dict(color="#ffffff", family="Arial, sans-serif")
-            )
+          <div className="flex flex-col gap-4 pt-4 border-t border-white/10">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] tracking-[0.2em] uppercase font-bold transition-colors duration-300" style={{ color: color1 }}>DRIVER 1</label>
+              <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+                <select value={store.driver1} onChange={e => store.updateParams({ driver1: e.target.value })} className="bg-transparent text-white font-normal text-sm outline-none cursor-pointer w-full appearance-none pr-6">
+                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-[#15151e] text-white">{full}</option>)}
+                </select>
+                <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
+              </div>
+            </div>
 
-            # 更新所有 X, Y 軸設定
-            for i in range(1, 6):
-                fig.update_xaxes(
-                    showgrid=True, gridcolor='rgba(255,255,255,0.05)', 
-                    fixedrange=True, # 絕對禁用 X 軸縮放
-                    showspikes=True, spikemode='across', spikethickness=1, spikecolor='#555555', spikedash='solid',
-                    row=i, col=1, tickfont=dict(size=9, color='#777')
-                )
-                fig.update_yaxes(
-                    showgrid=True, gridcolor='rgba(255,255,255,0.05)', 
-                    fixedrange=True, # 絕對禁用 Y 軸縮放
-                    row=i, col=1, tickfont=dict(size=9, color='#777')
-                )
-                # 讓子圖標題顏色低調且具科技感
-                if i-1 < len(fig.layout.annotations):
-                    fig.layout.annotations[i-1].update(font=dict(size=11, color="#888", letter_spacing="1px"))
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] tracking-[0.2em] uppercase font-bold transition-colors duration-300" style={{ color: color2 }}>DRIVER 2</label>
+              <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+                <select value={store.driver2} onChange={e => store.updateParams({ driver2: e.target.value })} className="bg-transparent text-white font-normal text-sm outline-none cursor-pointer w-full appearance-none pr-6">
+                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-[#15151e] text-white">{full}</option>)}
+                </select>
+                <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
+              </div>
+            </div>
+          </div>
+        </aside>
 
-            # Streamlit 1.60+ 支援 width="stretch" 等新參數，但為確保相容性直接忽略報錯參數
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        <main className="xl:col-span-5 flex flex-col h-full overflow-y-auto pr-4 pb-20 custom-scrollbar">
+          {store.loading ? (
+             <div className="flex items-center justify-center min-h-[400px]">
+               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white/20"></div>
+             </div>
+          ) : (!store.data1) ? (
+            <div className="text-gray-600 font-light flex items-center justify-center tracking-widest text-xs uppercase min-h-[400px]">
+              No Data Available
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <TelemetryChart title="Speed (km/h)" metric="Speed" />
+              <DeltaChart />
+              <TelemetryChart title="Engine (RPM)" metric="RPM" />
+              <TelemetryChart title="Throttle (%)" metric="Throttle" yRange={[-5, 105]} />
+              <TelemetryChart title="Brake" metric="Brake" yRange={[-0.1, 1.1]} isBrake={true} />
+              <TelemetryChart title="Gear" metric="nGear" yRange={[0, 9]} />
+              <TelemetryChart title="DRS Status" metric="DRS" yRange={[-1, 15]} />
+            </div>
+          )}
+        </main>
 
-# ----------------- 區塊 3: 賽道圖 & AI 分析 (Right) -----------------
-with col_right:
-    with st.container(height=850, border=False):
-        # 賽道渲染引擎
-        st.markdown('<p style="font-size: 11px; color: #e10600; letter-spacing: 0.15em; font-weight: 700; margin-bottom: -15px;">TRACK TOPOLOGY</p>', unsafe_allow_html=True)
-        if not df.empty and {"X", "Y"}.issubset(df.columns):
-            track = df[df.Driver == driver1] if "Driver" in df.columns else df
-            if not track.empty:
-                max_d = track["Distance"].max()
-                s1_lim, s2_lim = max_d * 0.32, max_d * 0.70
-                
-                # 向量化切分微區段，優化渲染效能
-                cond_s1 = track["Distance"] <= s1_lim
-                cond_s2 = (track["Distance"] > s1_lim) & (track["Distance"] <= s2_lim)
-                cond_s3 = track["Distance"] > s2_lim
+        <div className="xl:col-span-4 h-full relative">
+          <TrackMap />
+        </div>
 
-                map_fig = go.Figure()
-                map_fig.add_trace(go.Scattergl(x=track.loc[cond_s1, "X"], y=track.loc[cond_s1, "Y"], mode='lines', line=dict(color='#E10600', width=3.5), hoverinfo='skip'))
-                map_fig.add_trace(go.Scattergl(x=track.loc[cond_s2, "X"], y=track.loc[cond_s2, "Y"], mode='lines', line=dict(color='#00A0E9', width=3.5), hoverinfo='skip'))
-                map_fig.add_trace(go.Scattergl(x=track.loc[cond_s3, "X"], y=track.loc[cond_s3, "Y"], mode='lines', line=dict(color='#FFD500', width=3.5), hoverinfo='skip'))
+      </div>
+    </div>
+  );
+}
 
-                map_fig.update_layout(
-                    height=340, margin=dict(l=0, r=0, t=25, b=0),
-                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                    dragmode=False, # 禁用賽道圖拖曳
-                    xaxis=dict(visible=False, scaleanchor='y', scaleratio=1, fixedrange=True),
-                    yaxis=dict(visible=False, fixedrange=True), showlegend=False
-                )
-                st.plotly_chart(map_fig, use_container_width=True, config={'displayModeBar': False})
-        else:
-            st.markdown("<div style='height: 300px; display: flex; align-items: center; justify-content: center; color: #444; font-size: 12px; font-family: monospace;'>[ GPS / TRACK DATA UNAVAILABLE ]</div>", unsafe_allow_html=True)
-
-        st.markdown("<hr style='border-color: rgba(255,255,255,0.08); margin: 25px 0 15px 0;'>", unsafe_allow_html=True)
-
-        # AI 遙測診斷引擎
-        st.markdown('<p style="font-size: 11px; color: #e10600; letter-spacing: 0.15em; font-weight: 700; margin-bottom: 12px;">AI TELEMETRY ANALYSIS 🤖</p>', unsafe_allow_html=True)
-        insights = generate_advanced_ai_insights(df, driver1, driver2)
-        st.markdown(insights, unsafe_allow_html=True)
+export default App;
