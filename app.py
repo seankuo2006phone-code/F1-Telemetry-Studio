@@ -6,11 +6,11 @@ from plotly.subplots import make_subplots
 from huggingface_hub import list_repo_files
 import warnings
 
-# 忽略無關警告
+# Ignore warnings
 warnings.filterwarnings('ignore')
 
 # =========================================================
-# 1. 頁面設定 & 極致無邊框 F1 專業版 CSS
+# 1. Page Config & Extreme Borderless CSS
 # =========================================================
 st.set_page_config(
     page_title="F1 Telemetry Studio Pro",
@@ -20,15 +20,14 @@ st.set_page_config(
 
 REPO_ID = "SeanKuo2006/F1-Telemetry-Data"
 
-# 徹底消滅 Streamlit 邊框的極致 CSS
 custom_css = """
 <style>
-/* 隱藏預設的 Header, Footer 與 Menu */
+/* Hide Streamlit defaults */
 #MainMenu, footer, header { visibility: hidden !important; }
 
-/* 強制滿版與純黑背景 */
+/* Force Full Width & Pure Black Background */
 .block-container {
-    padding: 1rem 2rem !important;
+    padding: 0rem 1rem !important;
     max-width: 100% !important;
     background-color: #000000 !important;
 }
@@ -37,8 +36,8 @@ custom_css = """
     color: #ffffff !important;
 }
 
-/* 頂部 F1 標誌性紅色警示邊條 */
-header::before {
+/* F1 Top Red Border */
+.stApp::before {
     content: "";
     position: fixed;
     top: 0; left: 0; width: 100%; height: 4px;
@@ -47,44 +46,40 @@ header::before {
 }
 
 /* ---------------------------------------------------
-   極致無邊框選單：強制把 Streamlit 複雜的底層背景徹底挖空
+   EXTREME BORDERLESS SELECTBOX (No Border, No Underline, No Background)
 --------------------------------------------------- */
-div[data-testid="stSelectbox"] {
+div[data-testid="stSelectbox"] > div {
     background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 div[data-baseweb="select"] {
     background-color: transparent !important;
 }
-div[data-baseweb="select"] > div {
+div[data-baseweb="select"] > div,
+div[data-baseweb="select"] > div:hover, 
+div[data-baseweb="select"] > div:focus,
+div[data-baseweb="select"] > div:focus-within,
+div[data-baseweb="select"] > div:active {
     background-color: transparent !important;
     border: none !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
-    border-radius: 0 !important;
+    border-bottom: none !important;
     box-shadow: none !important;
-    transition: border-color 0.2s ease-in-out;
+    outline: none !important;
 }
-div[data-baseweb="select"] > div:hover, 
-div[data-baseweb="select"] > div:focus-within {
-    border-bottom: 1px solid #e10600 !important;
+div[data-baseweb="select"] span { 
+    color: #ffffff !important; 
+    font-size: 15px !important; 
+    font-weight: 500 !important;
+    padding-left: 0 !important;
 }
-div[data-baseweb="select"] span { color: #ffffff !important; font-size: 14px !important; }
-div[data-baseweb="select"] svg { fill: #ffffff !important; display: none !important; } /* 隱藏原生箭頭 */
+/* Hide dropdown arrow */
+div[data-baseweb="select"] svg { display: none !important; }
 
-/* 模擬選單自訂箭頭 */
-div[data-testid="stSelectbox"]::after {
-    content: "▼";
-    position: absolute;
-    right: 10px;
-    top: 35px;
-    font-size: 10px;
-    color: #666;
-    pointer-events: none;
-}
-
-/* 選單下拉列表的深色覆蓋 */
+/* Dropdown list styling */
 div[data-baseweb="popover"] > div {
-    background-color: #15151e !important;
-    border: 1px solid #333 !important;
+    background-color: #111111 !important;
+    border: 1px solid #222 !important;
     border-radius: 4px !important;
 }
 ul[data-testid="stSelectboxVirtualDropdown"] li {
@@ -95,7 +90,7 @@ ul[data-testid="stSelectboxVirtualDropdown"] li:hover {
     background-color: #e10600 !important;
 }
 
-/* 選單標題文字 (Year, Grand Prix...) */
+/* Selectbox labels (Year, Grand Prix...) */
 div[data-testid="stSelectbox"] label p {
     color: #6b7280 !important;
     font-size: 10px !important;
@@ -104,8 +99,8 @@ div[data-testid="stSelectbox"] label p {
     text-transform: uppercase !important;
 }
 
-/* 獨立區塊自訂捲軸樣式 */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #e10600; }
@@ -114,36 +109,46 @@ div[data-testid="stSelectbox"] label p {
 st.markdown(custom_css, unsafe_allow_html=True)
 
 # =========================================================
-# 2. F1 官方頂部列 (Logo + 導覽連結 + 登入/訂閱)
+# 2. Perfect Aligned Top Header (Logo + Nav + Title)
 # =========================================================
-st.markdown("""
-<div style="display: flex; justify-content: space-between; align-items: center; background-color: #15151e; padding: 12px 24px; border-bottom: 1px solid rgba(255,255,255,0.05); margin: -2rem -2rem 1.5rem -2rem;">
-    <div style="display: flex; align-items: center; gap: 35px;">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/3/33/F1.svg" alt="F1 Logo" style="height: 24px; width: auto;" />
-        <div style="display: flex; gap: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #fff; letter-spacing: 0.1em;">
-            <a href="https://www.formula1.com/en/racing/2024.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8;">Schedule</a>
-            <a href="https://www.formula1.com/en/results.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8;">Results</a>
-            <a href="https://www.formula1.com/en/results.html/team.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8;">Standings</a>
-            <a href="https://www.formula1.com/en/drivers.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8;">Drivers</a>
+# Built entirely in HTML to avoid Streamlit's anchor link icons and column misalignments
+header_html = """
+<div style="background-color: #15151e; padding: 15px 25px; margin: 0rem -1rem 20px -1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+    
+    <!-- Top Nav Row -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; gap: 35px;">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/3/33/F1.svg" alt="F1 Logo" style="height: 22px; width: auto;" />
+            <div style="display: flex; gap: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #fff; letter-spacing: 0.1em;">
+                <a href="https://www.formula1.com/en/racing/2024.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8;">Schedule</a>
+                <a href="https://www.formula1.com/en/results.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8;">Results</a>
+                <a href="https://www.formula1.com/en/results.html/team.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8;">Standings</a>
+                <a href="https://www.formula1.com/en/drivers.html" target="_blank" style="color: white; text-decoration: none; opacity: 0.8;">Drivers</a>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 15px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+            <a href="https://account.formula1.com" target="_blank" style="color: #d1d5db; text-decoration: none; opacity: 0.8;">Sign In</a>
+            <a href="https://f1tv.formula1.com/" target="_blank" style="background-color: #e10600; color: white; padding: 6px 14px; border-radius: 2px; text-decoration: none;">Subscribe</a>
         </div>
     </div>
-    <div style="display: flex; align-items: center; gap: 15px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
-        <a href="https://account.formula1.com" target="_blank" style="color: #d1d5db; text-decoration: none; opacity: 0.8;">Sign In</a>
-        <a href="https://f1tv.formula1.com/" target="_blank" style="background-color: #e10600; color: white; padding: 6px 14px; border-radius: 2px; text-decoration: none;">Subscribe</a>
+
+    <!-- Title & Live Sync Row (Perfectly Aligned) -->
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center;">
+            <span style="font-size: 18px; font-weight: 300; letter-spacing: 0.25em; color: white; margin: 0;">TELEMETRY STUDIO</span>
+            <span style="background-color: #e10600; font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 12px; color: white; letter-spacing: 0.1em;">PRO v2</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 10px; font-family: monospace; color: #9ca3af; letter-spacing: 0.1em;">LIVE SYNC</span>
+            <span style="display: inline-block; width: 8px; height: 8px; background-color: #e10600; border-radius: 50%; box-shadow: 0 0 5px #e10600;"></span>
+        </div>
     </div>
 </div>
-""", unsafe_allow_html=True)
-
-col_title, col_live = st.columns([4, 1])
-with col_title:
-    st.markdown('<h1 style="font-size: 16px; font-weight: 300; letter-spacing: 0.2em; margin: 0;">TELEMETRY STUDIO <span style="background-color: #e10600; font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 10px; color: white;">PRO v2</span></h1>', unsafe_allow_html=True)
-with col_live:
-    st.markdown('<div style="text-align: right; font-size: 10px; font-family: monospace; color: #9ca3af; padding-top: 3px;">LIVE SYNC <span style="display: inline-block; width: 8px; height: 8px; background-color: #e10600; border-radius: 50%; margin-left: 5px; box-shadow: 0 0 5px #e10600;"></span></div>', unsafe_allow_html=True)
-
-st.markdown("<hr style='border-color: rgba(255,255,255,0.05); margin: 12px 0 20px 0;'>", unsafe_allow_html=True)
+"""
+st.markdown(header_html, unsafe_allow_html=True)
 
 # =========================================================
-# 3. 核心資料與快取功能
+# 3. Core Data & Cache Functions
 # =========================================================
 TEAM_COLORS = {
     "red bull": "#3671C6", "ferrari": "#F91536", "mercedes": "#6CD3BF", "mclaren": "#F58020",
@@ -202,7 +207,6 @@ def load_telemetry(filename: str) -> pd.DataFrame:
         if 'Brake' in df_loaded.columns:
             df_loaded['Brake'] = pd.to_numeric(df_loaded['Brake'], errors='coerce').fillna(0).astype(int)
         
-        # 確保資料依照 Driver 與 Distance 排序
         if 'Driver' in df_loaded.columns and 'Distance' in df_loaded.columns:
             df_loaded = df_loaded.sort_values(by=['Driver', 'Distance']).reset_index(drop=True)
             
@@ -211,14 +215,13 @@ def load_telemetry(filename: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 # =========================================================
-# 4. Delta Time 運算核心 (翻譯自 React 的微積分逼近)
+# 4. Delta Time Engine
 # =========================================================
 def calculate_delta_time(d1, d2):
     if d1.empty or d2.empty or 'Distance' not in d1.columns or 'Distance' not in d2.columns:
         return None
         
     try:
-        # 計算 d1 的時間陣列
         dist1 = d1['Distance'].values
         speed_kmh1 = d1['Speed'].values
         time1 = np.zeros(len(dist1))
@@ -227,7 +230,6 @@ def calculate_delta_time(d1, d2):
             v_ms = max(((speed_kmh1[i] + speed_kmh1[i-1]) / 2) / 3.6, 0.1)
             time1[i] = time1[i-1] + (d_dist / v_ms)
             
-        # 計算 d2 的時間陣列
         dist2 = d2['Distance'].values
         speed_kmh2 = d2['Speed'].values
         time2 = np.zeros(len(dist2))
@@ -236,24 +238,22 @@ def calculate_delta_time(d1, d2):
             v_ms = max(((speed_kmh2[i] + speed_kmh2[i-1]) / 2) / 3.6, 0.1)
             time2[i] = time2[i-1] + (d_dist / v_ms)
             
-        # 線性插值：將 d2 的時間對齊到 d1 的距離座標上
         time2_interp = np.interp(dist1, dist2, time2)
-        
-        # 計算 Delta Time (以 d1 為基準)
         delta = time1 - time2_interp
         return pd.Series(delta, index=d1.index)
     except:
         return None
 
 # =========================================================
-# 5. AI 分析引擎
+# 5. AI Analytics Engine (Emoji-free to prevent SyntaxError)
 # =========================================================
 def generate_ai_insights(df, drv1, drv2):
     if df.empty or "Speed" not in df.columns:
         return "<p style='color: #666; font-size: 13px; font-family: monospace;'>[ Awaiting telemetry packets... ]</p>"
         
     d1, d2 = df[df['Driver'] == drv1], df[df['Driver'] == drv2]
-    if d1.empty or d2.empty: return "<p style='color: #666; font-size: 13px;'>Incomplete driver vectors.</p>"
+    if d1.empty or d2.empty: 
+        return "<p style='color: #666; font-size: 13px;'>Incomplete driver vectors.</p>"
         
     vmax1, vmax2 = d1['Speed'].max(), d2['Speed'].max()
     brake_zones1 = len(d1[d1['Brake'] > 0])
@@ -286,12 +286,12 @@ def generate_ai_insights(df, drv1, drv2):
     """
 
 # =========================================================
-# 6. 主程式排版與渲染 (三欄獨立容器)
+# 6. Main Layout (Three Columns)
 # =========================================================
 df_files = get_file_index()
 col_left, col_mid, col_right = st.columns([1.2, 3.0, 1.6], gap="large")
 
-# ----------------- 區塊 1: 控制選單 -----------------
+# ----------------- LEFT: Controls -----------------
 with col_left:
     with st.container(height=800, border=False):
         if not df_files.empty:
@@ -317,7 +317,7 @@ with col_left:
         else:
             df, driver1, driver2 = pd.DataFrame(), "VER", "LEC"
 
-# ----------------- 區塊 2: 核心遙測圖表 -----------------
+# ----------------- MIDDLE: Telemetry Charts -----------------
 with col_mid:
     with st.container(height=800, border=False):
         if df.empty or "Driver" not in df.columns:
@@ -326,7 +326,6 @@ with col_mid:
             d1 = df[df['Driver'] == driver1].copy()
             d2 = df[df['Driver'] == driver2].copy()
             
-            # 建立 Delta Time 陣列
             if driver1 != driver2:
                 d1['Delta'] = calculate_delta_time(d1, d2)
             else:
@@ -335,13 +334,12 @@ with col_mid:
             c1 = get_team_color(d1.Team.iloc[0]) if not d1.empty else "#fff"
             c2 = get_team_color(d2.Team.iloc[0]) if not d2.empty else "#fff"
 
-            # 構建 6 個子圖 (加入了 Delta)
             fig = make_subplots(
                 rows=6, cols=1, shared_xaxes=True, vertical_spacing=0.015,
                 subplot_titles=("Delta Time (s)", "Speed (km/h)", "Throttle (%)", "Brake", "RPM", "Gear")
             )
             
-            # --- 繪製 Delta (僅畫 Driver 1 視角) ---
+            # Delta trace
             if 'Delta' in d1.columns:
                 fig.add_trace(go.Scattergl(
                     x=d1['Distance'], y=d1['Delta'], mode="lines",
@@ -349,7 +347,7 @@ with col_mid:
                     hovertemplate=f"<b>{driver1} Relative</b>: %{{y:+.3f}}s<extra></extra>"
                 ), row=1, col=1)
 
-            # --- 繪製物理指標 ---
+            # Telemetry traces
             metrics = [("Speed", 2, "solid"), ("Throttle", 3, "solid"), ("Brake", 4, "dot"), ("RPM", 5, "solid"), ("Gear", 6, "solid")]
             for drv, d_drv, c_drv in [(driver1, d1, c1), (driver2, d2, c2)]:
                 if d_drv.empty: continue
@@ -362,36 +360,35 @@ with col_mid:
                         hovertemplate=f"<b>{drv}</b>: %{{y}}<extra></extra>"
                     ), row=row, col=1)
 
-            # --- 統一版面配置 (關閉拖曳/縮放，開啟垂直游標追蹤) ---
+            # Locked layout with spike lines
             fig.update_layout(
                 height=780, margin=dict(l=25, r=15, t=30, b=10),
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                 showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#bbb")),
                 hovermode='x unified', hoverlabel=dict(bgcolor="#111", font_size=12, font_family="monospace"),
-                dragmode=False, # 禁用滑鼠拖曳與框選放大
+                dragmode=False, 
                 font=dict(color="#ffffff")
             )
 
             for i in range(1, 7):
                 fig.update_xaxes(
-                    showgrid=True, gridcolor='rgba(255,255,255,0.05)', fixedrange=True, # 禁用X軸縮放
+                    showgrid=True, gridcolor='rgba(255,255,255,0.05)', fixedrange=True, 
                     showspikes=True, spikemode='across', spikethickness=1, spikecolor='#666', spikedash='solid',
                     row=i, col=1, tickfont=dict(size=9, color='#777')
                 )
                 fig.update_yaxes(
-                    showgrid=True, gridcolor='rgba(255,255,255,0.05)', fixedrange=True, # 禁用Y軸縮放
+                    showgrid=True, gridcolor='rgba(255,255,255,0.05)', fixedrange=True, 
                     row=i, col=1, tickfont=dict(size=9, color='#777')
                 )
                 if i-1 < len(fig.layout.annotations):
                     fig.layout.annotations[i-1].update(font=dict(size=10, color="#888", letter_spacing="2px"))
 
-            # 強制忽略 width 報錯
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-# ----------------- 區塊 3: 賽道圖 & AI 分析 -----------------
+# ----------------- RIGHT: Track & AI -----------------
 with col_right:
     with st.container(height=800, border=False):
-        # 賽道圖
+        # Track Map
         st.markdown('<p style="font-size: 11px; color: #e10600; letter-spacing: 0.15em; font-weight: 700; margin-bottom: -15px;">TRACK TOPOLOGY</p>', unsafe_allow_html=True)
         if not df.empty and {"X", "Y"}.issubset(df.columns):
             track = df[df.Driver == driver1] if "Driver" in df.columns else df
@@ -420,6 +417,6 @@ with col_right:
 
         st.markdown("<hr style='border-color: rgba(255,255,255,0.08); margin: 20px 0;'>", unsafe_allow_html=True)
 
-        # AI 遙測診斷引擎
-        st.markdown('<p style="font-size: 11px; color: #e10600; letter-spacing: 0.15em; font-weight: 700; margin-bottom: 12px;">AI TELEMETRY ANALYSIS 🤖</p>', unsafe_allow_html=True)
+        # AI Analysis
+        st.markdown('<p style="font-size: 11px; color: #e10600; letter-spacing: 0.15em; font-weight: 700; margin-bottom: 12px;">AI TELEMETRY ANALYSIS</p>', unsafe_allow_html=True)
         st.markdown(generate_ai_insights(df, driver1, driver2), unsafe_allow_html=True)
