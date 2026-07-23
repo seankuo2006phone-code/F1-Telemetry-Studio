@@ -20,7 +20,7 @@ _CACHE_MAPPING = None
 _CACHE_OPTIONS = None
 
 def _normalize_str(s: str) -> str:
-    """強制消除重音符號 (例如 São -> Sao) 並轉為小寫"""
+    """強制消除重音符號並轉為小寫"""
     return unicodedata.normalize('NFKD', s).encode('ASCII', 'ignore').decode('utf-8').lower()
 
 def _get_file_mapping():
@@ -101,7 +101,6 @@ def _load_session_df(year: int, event_name: str, session_type: str):
     filename = mapping.get((str(year), event_name, session_type))
     
     if not filename:
-        # 強制無視重音與特殊拼法的暴力模糊搜尋
         try:
             files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
             norm_event = _normalize_str(event_name).replace("grand", "").replace("prix", "").strip()
@@ -129,7 +128,6 @@ def _load_session_df(year: int, event_name: str, session_type: str):
     try:
         local_path = hf_hub_download(repo_id=REPO_ID, filename=filename, repo_type="dataset")
         df = pd.read_parquet(local_path)
-        # 關鍵修復：填補所有 NaN，防止 FastAPI JSON 崩潰
         return df.fillna(0)
     except Exception as e:
         raise FileNotFoundError(f"無法從 Hugging Face 下載 {filename}: {e}")
@@ -164,6 +162,13 @@ def _filter_driver_data(df, driver_name: str):
     filtered_df = df[mask]
     return filtered_df
 
+def _get_col(df, possible_names):
+    """無差別搜尋欄位名稱（無視大小寫）"""
+    for col in df.columns:
+        if col.upper() in [n.upper() for n in possible_names]:
+            return col
+    return None
+
 @app.get("/api/options")
 def get_options():
     _, options = _get_file_mapping()
@@ -183,24 +188,40 @@ def get_telemetry(
         driver_df = _filter_driver_data(df, driver)
 
         if len(driver_df) == 0:
-            return {"error": f"找不到車手 {driver} 的數據。該資料集欄位有：{list(df.columns)}"}
+            return {"error": f"找不到車手 {driver} 的數據。該資料集包含的欄位有：{list(df.columns)}"}
 
-        team_col = 'Team' if 'Team' in df.columns else 'team'
-        team_name = str(driver_df[team_col].iloc[0]) if team_col in driver_df.columns else "Unknown"
+        # 動態抓取欄位名稱，無視大小寫
+        team_col = _get_col(driver_df, ['Team'])
+        dist_col = _get_col(driver_df, ['Distance'])
+        speed_col = _get_col(driver_df, ['Speed'])
+        throttle_col = _get_col(driver_df, ['Throttle'])
+        brake_col = _get_col(driver_df, ['Brake'])
+        rpm_col = _get_col(driver_df, ['RPM'])
+        gear_col = _get_col(driver_df, ['nGear', 'Gear'])
+        drs_col = _get_col(driver_df, ['DRS'])
+        x_col = _get_col(driver_df, ['X'])
+        y_col = _get_col(driver_df, ['Y'])
+        sector_col = _get_col(driver_df, ['Sector'])
+
+        # 防呆檢查：如果連 Speed 欄位都找不到，直接報錯，讓你知道是不是上傳錯了！
+        if not speed_col:
+            return {"error": f"這份檔案不是遙測資料！它包含的欄位有: {list(df.columns)}。請確認上傳到 Hugging Face 的是 telemetry 檔案，而不是 laps 檔案。"}
+
+        team_name = str(driver_df[team_col].iloc[0]) if team_col else "Unknown"
 
         return {
             "Driver": str(driver).upper(),
             "Team": team_name,
-            "Distance": driver_df['Distance'].tolist() if 'Distance' in driver_df.columns else [],
-            "Speed": driver_df['Speed'].tolist() if 'Speed' in driver_df.columns else [],
-            "Throttle": driver_df['Throttle'].tolist() if 'Throttle' in driver_df.columns else [],
-            "Brake": driver_df['Brake'].astype(int).tolist() if 'Brake' in driver_df.columns else [],
-            "RPM": driver_df['RPM'].tolist() if 'RPM' in driver_df.columns else [],
-            "nGear": driver_df['nGear'].astype(int).tolist() if 'nGear' in driver_df.columns else [],
-            "DRS": driver_df['DRS'].tolist() if 'DRS' in driver_df.columns else [0]*len(driver_df),
-            "X": driver_df['X'].tolist() if 'X' in driver_df.columns else [],
-            "Y": driver_df['Y'].tolist() if 'Y' in driver_df.columns else [],
-            "Sector": driver_df['Sector'].astype(int).tolist() if 'Sector' in driver_df.columns else [1]*len(driver_df)
+            "Distance": driver_df[dist_col].tolist() if dist_col else [],
+            "Speed": driver_df[speed_col].tolist() if speed_col else [],
+            "Throttle": driver_df[throttle_col].tolist() if throttle_col else [],
+            "Brake": driver_df[brake_col].astype(int).tolist() if brake_col else [],
+            "RPM": driver_df[rpm_col].tolist() if rpm_col else [],
+            "nGear": driver_df[gear_col].astype(int).tolist() if gear_col else [],
+            "DRS": driver_df[drs_col].tolist() if drs_col else [0]*len(driver_df),
+            "X": driver_df[x_col].tolist() if x_col else [],
+            "Y": driver_df[y_col].tolist() if y_col else [],
+            "Sector": driver_df[sector_col].astype(int).tolist() if sector_col else [1]*len(driver_df)
         }
     except Exception as e:
         return {"error": str(e)}
