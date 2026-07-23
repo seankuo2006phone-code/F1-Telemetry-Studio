@@ -38,31 +38,46 @@ def _load_session_df(year: int, event_name: str, session_type: str):
 @app.get("/api/options")
 def get_options():
     options = {}
+    valid_sessions = {"FP1", "FP2", "FP3", "Q", "R", "Qualifying", "Race", "Sprint", "Sprint Qualifying"}
     try:
-        # 直接從 Hugging Face 雲端獲取檔案清單，解決 Render 雲端硬碟無快取的問題
         files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
         for f in files:
-            if not f.endswith(".parquet"): continue
-            name_part = f[:-8] # 移除 .parquet
+            if not f.endswith(".parquet"):
+                continue
+            name_part = f[:-8]  # 移除 .parquet
             parts = name_part.split("_")
-            if len(parts) < 3: continue
-            
+            if len(parts) < 2:
+                continue
+
             year = str(parts[0])
-            event_name = "_".join(parts[1:-1]).replace("_", " ").title()
-            session = parts[-1]
-            
-            if year not in options: options[year] = {}
-            if event_name not in options[year]: options[year][event_name] = []
-            if session not in options[year][event_name]: 
+
+            # 從後面檢查是不是 Session 結尾
+            last_part = parts[-1]
+            # 支援數字（例如 1, 2, 3 代表練習賽）或文字
+            if last_part in ["1", "2", "3"] and len(parts) >= 3 and "Free" in parts[-2]:
+                session = f"Free Practice {last_part}"
+                event_name = "_".join(parts[1:-2]).replace("_", " ").title()
+            elif last_part in valid_sessions or last_part in ["1", "2", "3"]:
+                session = last_part
+                event_name = "_".join(parts[1:-1]).replace("_", " ").title()
+            else:
+                session = last_part
+                event_name = "_".join(parts[1:-1]).replace("_", " ").title()
+
+            if year not in options:
+                options[year] = {}
+            if event_name not in options[year]:
+                options[year][event_name] = []
+            if session not in options[year][event_name]:
                 options[year][event_name].append(session)
     except Exception as e:
         print("從 Hugging Face 獲取檔案清單錯誤:", e)
 
-    # 最終保底機制
+    # 保底機制
     if not options:
         options = {
             "2024": {
-                "Bahrain Grand Prix": ["FP1", "FP2", "FP3", "Q", "R", "Qualifying", "Race"]
+                "Bahrain Grand Prix": ["Free Practice 1", "Free Practice 2", "Free Practice 3", "Qualifying", "Race"]
             }
         }
     return options
