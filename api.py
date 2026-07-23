@@ -2,7 +2,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import os
-from huggingface_hub import list_repo_files
+from huggingface_hub import list_repo_files, hf_hub_download
 
 app = FastAPI(title="F1 Telemetry Studio PRO API (Bulletproof Engine)")
 
@@ -15,64 +15,70 @@ app.add_middleware(
 )
 
 REPO_ID = "SeanKuo2006/F1-Telemetry-Data"
-DATASET_DIR = "parquet_cache"
-os.makedirs(DATASET_DIR, exist_ok=True)
+
+# 加入全域快取，避免 Hugging Face API 頻繁請求導致被 Ban
+_CACHE_MAPPING = None
+_CACHE_OPTIONS = None
 
 def _get_file_mapping():
-    """自動掃描 Hugging Face 雲端檔案，確保 Grand Prix 絕對乾淨，Sprint 正確歸入 Session"""
+    global _CACHE_MAPPING, _CACHE_OPTIONS
+    if _CACHE_MAPPING is not None and _CACHE_OPTIONS is not None:
+        return _CACHE_MAPPING, _CACHE_OPTIONS
+        
     mapping = {}
     options = {}
     try:
         files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
         for f in files:
             if not f.endswith(".parquet"): continue
-            name_part = f[:-8] # 移除 .parquet
+            name_part = f[:-8] 
             parts = name_part.split("_")
-            if len(parts) < 2: continue
+            if len(parts) < 3: continue
             
             year = parts[0]
             rest = parts[1:]
-            rest_upper = [p.upper() for p in rest]
             
-            # 從尾端精準剝離 Session
-            session = "Race"
-            if len(rest_upper) >= 2 and rest_upper[-2] == "SPRINT" and rest_upper[-1] in ["QUALIFYING", "Q"]:
-                session = "Sprint Qualifying"
-                event_parts = rest[:-2]
-            elif rest_upper[-1] in ["SQ", "SPRINTQUALIFYING"]:
-                session = "Sprint Qualifying"
-                event_parts = rest[:-1]
-            elif rest_upper[-1] == "SPRINT":
-                session = "Sprint"
-                event_parts = rest[:-1]
-            elif rest_upper[-1] in ["Q", "QUALIFYING"]:
-                session = "Qualifying"
-                event_parts = rest[:-1]
-            elif rest_upper[-1] in ["R", "RACE"]:
-                session = "Race"
-                event_parts = rest[:-1]
-            elif rest_upper[-1] in ["1", "FP1", "P1"]:
-                session = "Free Practice 1"
-                event_parts = rest[:-1]
-                if event_parts and event_parts[-1].upper() in ["FREE", "FP", "PRACTICE"]:
-                    event_parts = event_parts[:-1]
-            elif rest_upper[-1] in ["2", "FP2", "P2"]:
-                session = "Free Practice 2"
-                event_parts = rest[:-1]
-                if event_parts and event_parts[-1].upper() in ["FREE", "FP", "PRACTICE"]:
-                    event_parts = event_parts[:-1]
-            elif rest_upper[-1] in ["3", "FP3", "P3"]:
-                session = "Free Practice 3"
-                event_parts = rest[:-1]
-                if event_parts and event_parts[-1].upper() in ["FREE", "FP", "PRACTICE"]:
-                    event_parts = event_parts[:-1]
+            gp_index = -1
+            for i in range(len(rest) - 1):
+                if rest[i].lower() == "grand" and rest[i+1].lower() == "prix":
+                    gp_index = i + 1
+                    break
+            
+            if gp_index != -1:
+                event_parts = rest[:gp_index+1]
+                session_parts = rest[gp_index+1:]
+                event_name = " ".join(event_parts).title()
             else:
-                session = rest[-1]
-                event_parts = rest[:-1]
-            
-            event_name = " ".join(event_parts).title()
-            if event_name.endswith(" Grand") and not event_name.endswith("Grand Prix"):
-                event_name += " Prix"
+                event_parts = []
+                session_parts = []
+                for i, p in enumerate(rest):
+                    if p.upper() in ["FP1", "FP2", "FP3", "P1", "P2", "P3", "Q", "QUALIFYING", "R", "RACE", "SPRINT", "SQ"]:
+                        event_parts = rest[:i]
+                        session_parts = rest[i:]
+                        break
+                if not event_parts:
+                    event_parts = rest[:-1]
+                    session_parts = [rest[-1]] if rest else []
+                event_name = " ".join(event_parts).title()
+                
+            session_str = "".join(session_parts).upper()
+            if any(k in session_str for k in ["FP1", "P1", "FREE1", "PRACTICE1"]) or session_parts == ["1"]:
+                session = "Free Practice 1"
+            elif any(k in session_str for k in ["FP2", "P2", "FREE2", "PRACTICE2"]) or session_parts == ["2"]:
+                session = "Free Practice 2"
+            elif any(k in session_str for k in ["FP3", "P3", "FREE3", "PRACTICE3"]) or session_parts == ["3"]:
+                session = "Free Practice 3"
+            elif "SPRINT" in session_str and ("QUALIFYING" in session_str or "Q" in session_str or "SQ" in session_str):
+                session = "Sprint Qualifying"
+            elif "SPRINT" in session_str:
+                session = "Sprint"
+            elif "QUALIFYING" in session_str or session_str == "Q":
+                session = "Qualifying"
+            elif "RACE" in session_str or session_str == "R" or not session_parts:
+                session = "Race"
+            else:
+                session = " ".join(session_parts).title()
+                if not session: session = "Race"
                 
             mapping[(str(year), event_name, session)] = f
             
@@ -83,46 +89,48 @@ def _get_file_mapping():
     except Exception as e:
         print("檔案掃描錯誤:", e)
         
+    _CACHE_MAPPING = mapping
+    _CACHE_OPTIONS = options
     return mapping, options
 
 
 def _load_session_df(year: int, event_name: str, session_type: str):
-    """透過精準對應字典從 Hugging Face 雲端直接抓取正確的 Parquet 檔案"""
     mapping, _ = _get_file_mapping()
     filename = mapping.get((str(year), event_name, session_type))
-    
-    if not filename:
-        # 備用模糊搜尋
-        try:
-            files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
-            raw_event = event_name.replace(" ", "_")
-            for f in files:
-                if str(year) in f and raw_event.lower() in f.lower():
-                    if session_type.lower().replace(" ", "_") in f.lower():
-                        filename = f
-                        break
-            if not filename:
-                for f in files:
-                    if str(year) in f and raw_event.lower() in f.lower():
-                        filename = f
-                        break
-        except Exception as e:
-            print("備用搜尋錯誤:", e)
             
     if not filename:
         raise FileNotFoundError(f"找不到對應資料檔案: {year} {event_name} {session_type}")
         
-    local_path = os.path.join(DATASET_DIR, filename)
-    if os.path.exists(local_path):
-        return pd.read_parquet(local_path)
-        
-    hf_url = f"hf://datasets/{REPO_ID}/{filename}"
     try:
-        df_temp = pd.read_parquet(hf_url)
-        df_temp.to_parquet(local_path)
-        return df_temp
+        local_path = hf_hub_download(repo_id=REPO_ID, filename=filename, repo_type="dataset")
+        return pd.read_parquet(local_path)
     except Exception as e:
         raise FileNotFoundError(f"無法從 Hugging Face 下載 {filename}: {e}")
+
+# 新增的智慧車手過濾器：解決全名(Max Verstappen)與縮寫(VER)無法匹配的問題
+def _filter_driver_data(df, driver_name: str):
+    possible_cols = ['Driver', 'Abbreviation', 'DriverNumber', 'name']
+    driver_col = next((col for col in possible_cols if col in df.columns), df.columns[0])
+    
+    abbr_map = {
+        "MAX VERSTAPPEN": "VER", "CHARLES LECLERC": "LEC", "SERGIO PEREZ": "PER",
+        "CARLOS SAINZ": "SAI", "LANDO NORRIS": "NOR", "OSCAR PIASTRI": "PIA",
+        "GEORGE RUSSELL": "RUS", "LEWIS HAMILTON": "HAM", "FERNANDO ALONSO": "ALO",
+        "LANCE STROLL": "STR", "YUKI TSUNODA": "TSU", "DANIEL RICCIARDO": "RIC",
+        "NICO HULKENBERG": "HUL", "KEVIN MAGNUSSEN": "MAG", "ALEXANDER ALBON": "ALB",
+        "LOGAN SARGEANT": "SAR", "ESTEBAN OCON": "OCO", "PIERRE GASLY": "GAS",
+        "VALTTERI BOTTAS": "BOT", "ZHOU GUANYU": "ZHO", "GUANYU ZHOU": "ZHO",
+        "LIAM LAWSON": "LAW", "OLIVER BEARMAN": "BEA", "FRANCO COLAPINTO": "COL"
+    }
+    
+    driver_upper = driver_name.upper()
+    abbr = abbr_map.get(driver_upper, driver_name.split()[-1][:3].upper())
+    last_name = driver_name.split()[-1].upper()
+    
+    driver_series = df[driver_col].astype(str).str.upper()
+    # 只要符合全名、縮寫，或包含姓氏，全部都能正確抓到
+    mask = (driver_series == driver_upper) | (driver_series == abbr) | (driver_series.str.contains(last_name))
+    return df[mask]
 
 
 @app.get("/api/options")
@@ -131,7 +139,7 @@ def get_options():
     if not options:
         options = {
             "2024": {
-                "Austrian Grand Prix": ["Free Practice 1", "Qualifying", "Sprint", "Race"]
+                "Bahrain Grand Prix": ["Free Practice 1", "Free Practice 2", "Free Practice 3", "Qualifying", "Sprint", "Race"]
             }
         }
     return options
@@ -146,14 +154,15 @@ def get_telemetry(
 ):
     try:
         df = _load_session_df(year, event_name, session_type)
-        driver_col = 'Driver' if 'Driver' in df.columns else df.columns[0]
-        driver_df = df[df[driver_col].astype(str).str.upper() == driver.upper()]
+        
+        # 使用智慧過濾器取代原本必定失敗的嚴格字串比對
+        driver_df = _filter_driver_data(df, driver)
 
         if len(driver_df) == 0:
-            return {"error": f"找不到車手 {driver}"}
+            return {"error": f"找到賽事資料，但裡面沒有車手 {driver} 的數據。"}
 
         team_col = 'Team' if 'Team' in df.columns else 'team'
-        team_name = str(driver_df[team_col].iloc[0]) if team_col in df.columns else "Unknown"
+        team_name = str(driver_df[team_col].iloc[0]) if team_col in driver_df.columns else "Unknown"
 
         return {
             "Driver": str(driver).upper(),
@@ -186,12 +195,12 @@ def ai_analysis(
         if df.empty:
             return {"error": "找不到指定 session 的資料"}
 
-        driver_col = 'Driver' if 'Driver' in df.columns else df.columns[0]
-        driver1_df = df[df[driver_col].astype(str).str.upper() == driver1.upper()]
-        driver2_df = df[df[driver_col].astype(str).str.upper() == driver2.upper()]
+        # 使用智慧過濾器
+        driver1_df = _filter_driver_data(df, driver1)
+        driver2_df = _filter_driver_data(df, driver2)
 
         if len(driver1_df) == 0 or len(driver2_df) == 0:
-            return {"error": "找不到指定車手資料，請確認 driver 名稱與 session 是否一致"}
+            return {"error": "找不到指定車手資料，請確認車手是否參與了該場 Session"}
 
         def summarize(target_df):
             speed = target_df['Speed'].astype(float) if 'Speed' in target_df.columns else pd.Series([0.0] * len(target_df))
