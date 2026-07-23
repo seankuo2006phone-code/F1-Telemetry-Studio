@@ -3,7 +3,7 @@ import './App.css';
 import { create } from 'zustand';
 import Plot from 'react-plotly.js';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://f1-telemetry-studio-5r7o.onrender.com';
 
 const SESSION_MAP: Record<string, string> = {
   "R": "Race", "Q": "Qualifying", "S": "Sprint", "SQ": "Sprint Shootout",
