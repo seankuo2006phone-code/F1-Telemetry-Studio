@@ -39,29 +39,30 @@ def _load_session_df(year: int, event_name: str, session_type: str):
 def get_options():
     options = {}
     try:
-        if os.path.exists(DATASET_DIR):
-            for f in os.listdir(DATASET_DIR):
-                if not f.endswith(".parquet"): continue
-                name_part = f[:-8] # 移除 .parquet
-                parts = name_part.split("_")
-                if len(parts) < 3: continue
-                
-                year = str(parts[0])
-                event_name = "_".join(parts[1:-1]).replace("_", " ").title()
-                session = parts[-1]
-                
-                if year not in options: options[year] = {}
-                if event_name not in options[year]: options[year][event_name] = []
-                if session not in options[year][event_name]: 
-                    options[year][event_name].append(session)
+        # 直接從 Hugging Face 雲端獲取檔案清單，解決 Render 雲端硬碟無快取的問題
+        files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
+        for f in files:
+            if not f.endswith(".parquet"): continue
+            name_part = f[:-8] # 移除 .parquet
+            parts = name_part.split("_")
+            if len(parts) < 3: continue
+            
+            year = str(parts[0])
+            event_name = "_".join(parts[1:-1]).replace("_", " ").title()
+            session = parts[-1]
+            
+            if year not in options: options[year] = {}
+            if event_name not in options[year]: options[year][event_name] = []
+            if session not in options[year][event_name]: 
+                options[year][event_name].append(session)
     except Exception as e:
-        print("掃描本地快取錯誤:", e)
+        print("從 Hugging Face 獲取檔案清單錯誤:", e)
 
-    # 保底機制：如果本機完全沒有掃描到檔案，提供預設選項讓前端正常運作
+    # 最終保底機制
     if not options:
         options = {
             "2024": {
-                "Bahrain Grand Prix": ["FP1", "FP2", "FP3", "Q", "R"]
+                "Bahrain Grand Prix": ["FP1", "FP2", "FP3", "Q", "R", "Qualifying", "Race"]
             }
         }
     return options
