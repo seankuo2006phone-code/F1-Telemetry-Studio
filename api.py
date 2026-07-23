@@ -19,7 +19,7 @@ DATASET_DIR = "parquet_cache"
 os.makedirs(DATASET_DIR, exist_ok=True)
 
 def _get_file_mapping():
-    """自動掃描 Hugging Face 雲端檔案，建立精準對應字典"""
+    """自動掃描 Hugging Face 雲端檔案，精準分離 Grand Prix 與 Session"""
     mapping = {}
     try:
         files = list_repo_files(repo_id=REPO_ID, repo_type="dataset")
@@ -31,95 +31,87 @@ def _get_file_mapping():
             
             year = str(parts[0])
             rest = parts[1:]
+            rest_upper = [p.upper() for p in rest]
             
-            last = rest[-1].upper()
-            second_last = rest[-2].upper() if len(rest) >= 2 else ""
-            
-            # 智慧解析 Session 與純賽事名稱
-            if last in ["R", "RACE"]:
-                session = "Race"
-                event_parts = rest[:-1]
-            elif last in ["Q", "QUALIFYING"]:
-                session = "Qualifying"
-                event_parts = rest[:-1]
-            elif last in ["SPRINT"]:
-                session = "Sprint"
-                event_parts = rest[:-1]
-            elif last in ["SQ"] or (last == "QUALIFYING" and second_last == "SPRINT"):
+            # 從尾端精準判斷 Session 並從 rest 中剝離，確保 Grand Prix 名稱絕對純淨
+            if len(rest_upper) >= 2 and rest_upper[-2] == "SPRINT" and rest_upper[-1] in ["QUALIFYING", "Q"]:
                 session = "Sprint Qualifying"
-                event_parts = rest[:-2] if last == "SQ" else rest[:-2]
-            elif last in ["1", "2", "3"]:
-                if len(rest) >= 3 and rest[-3].upper() in ["FREE", "FP"]:
-                    session = f"Free Practice {last}"
-                    event_parts = rest[:-3]
-                elif second_last in ["FP1", "FP2", "FP3", "P1", "P2", "P3", "P", "PRACTICE", "FREE"]:
-                    session = f"Free Practice {last}"
-                    event_parts = rest[:-2]
-                else:
-                    session = f"Free Practice {last}"
-                    event_parts = rest[:-1]
-            elif last in ["FP1", "P1"]:
+                rest = rest[:-2]
+            elif rest_upper[-1] in ["SQ"]:
+                session = "Sprint Qualifying"
+                rest = rest[:-1]
+            elif rest_upper[-1] in ["SPRINT"]:
+                session = "Sprint"
+                rest = rest[:-1]
+            elif rest_upper[-1] in ["Q", "QUALIFYING"]:
+                session = "Qualifying"
+                rest = rest[:-1]
+            elif rest_upper[-1] in ["R", "RACE"]:
+                session = "Race"
+                rest = rest[:-1]
+            elif rest_upper[-1] in ["1", "FP1", "P1"]:
                 session = "Free Practice 1"
-                event_parts = rest[:-1]
-            elif last in ["FP2", "P2"]:
+                rest = rest[:-1]
+                if rest and rest[-1].upper() in ["FREE", "FP", "PRACTICE"]: rest = rest[:-1]
+            elif rest_upper[-1] in ["2", "FP2", "P2"]:
                 session = "Free Practice 2"
-                event_parts = rest[:-1]
-            elif last in ["FP3", "P3"]:
+                rest = rest[:-1]
+                if rest and rest[-1].upper() in ["FREE", "FP", "PRACTICE"]: rest = rest[:-1]
+            elif rest_upper[-1] in ["3", "FP3", "P3"]:
                 session = "Free Practice 3"
-                event_parts = rest[:-1]
+                rest = rest[:-1]
+                if rest and rest[-1].upper() in ["FREE", "FP", "PRACTICE"]: rest = rest[:-1]
             else:
                 session = rest[-1]
-                event_parts = rest[:-1]
+                rest = rest[:-1]
             
-            event_name = " ".join(event_parts).title()
+            # 清理殘留的字眼
+            while rest and rest[-1].upper() in ["FREE", "PRACTICE", "FP"]:
+                rest = rest[:-1]
+                
+            event_name = " ".join(rest).title()
             mapping[(year, event_name, session)] = f
-            # 兼容縮寫對應
-            mapping[(year, event_name, last)] = f
+            mapping[(year, event_name, rest_upper[-1] if rest_upper else session)] = f
     except Exception as e:
         print("解析 Hugging Face 檔案對應錯誤:", e)
     return mapping
 
 
 def _load_session_df(year: int, event_name: str, session_type: str):
-    mapping = _get_file_mapping()
+    raw_event = event_name.replace(" ", "_")
     
-    # 1. 嘗試直接精準對應
-    filename = mapping.get((str(year), event_name, session_type))
+    # 建立多種可能的檔名組合直接去 Hugging Face 嘗試下載，不依賴 scan
+    session_variants = {
+        "Free Practice 1": ["FP1", "1", "Practice_1", "Free_Practice_1"],
+        "Free Practice 2": ["FP2", "2", "Practice_2", "Free_Practice_2"],
+        "Free Practice 3": ["FP3", "3", "Practice_3", "Free_Practice_3"],
+        "Qualifying": ["Qualifying", "Q"],
+        "Race": ["Race", "R"],
+        "Sprint": ["Sprint"],
+        "Sprint Qualifying": ["Sprint_Qualifying", "SQ"]
+    }
     
-    # 2. 如果找不到，進行智慧模糊匹配
-    if not filename:
-        for (y, ev, ses), fname in mapping.items():
-            if y == str(year) and ev.lower() == event_name.lower():
-                if ses.lower() == session_type.lower() or session_type.lower() in ses.lower():
-                    filename = fname
-                    break
-                    
-    # 3. 若仍找不到，使用預設規則拼接檔名
-    if not filename:
-        raw_event = event_name.replace(" ", "_")
-        session_mapping = {
-            "Free Practice 1": "FP1",
-            "Free Practice 2": "FP2",
-            "Free Practice 3": "FP3",
-            "Qualifying": "Qualifying",
-            "Race": "Race",
-            "Sprint": "Sprint",
-            "Sprint Qualifying": "Sprint_Qualifying"
-        }
-        s_code = session_mapping.get(session_type, session_type)
-        filename = f"{year}_{raw_event}_{s_code}.parquet"
+    variants = session_variants.get(session_type, [session_type])
+    
+    # 依次嘗試所有可能的檔名格式
+    for var in variants:
+        filename = f"{year}_{raw_event}_{var}.parquet"
+        local_path = os.path.join(DATASET_DIR, filename)
 
-    local_path = os.path.join(DATASET_DIR, filename)
-    if os.path.exists(local_path):
-        return pd.read_parquet(local_path)
-        
-    hf_url = f"hf://datasets/{REPO_ID}/{filename}"
-    try:
-        df_temp = pd.read_parquet(hf_url)
-        df_temp.to_parquet(local_path)
-        return df_temp
-    except Exception as e:
-        raise FileNotFoundError(f"找不到對應資料檔案 {filename}: {e}")
+        if os.path.exists(local_path):
+            return pd.read_parquet(local_path)
+            
+        hf_url = f"hf://datasets/{REPO_ID}/{filename}"
+        try:
+            print(f"嘗試從 Hugging Face 下載: {hf_url}")
+            df_temp = pd.read_parquet(hf_url)
+            df_temp.to_parquet(local_path)
+            return df_temp
+        except Exception as e:
+            print(f"嘗試下載 {filename} 失敗: {e}")
+            continue
+            
+    raise FileNotFoundError(f"找不到對應資料檔案: {year} {event_name} {session_type}")
 
 
 @app.get("/api/options")
@@ -131,6 +123,7 @@ def get_options():
         norm_session = session
         if session.upper() in ["Q", "QUALIFYING"]: norm_session = "Qualifying"
         elif session.upper() in ["R", "RACE"]: norm_session = "Race"
+        elif session.upper() in ["SPRINT"]: norm_session = "Sprint"
         elif session.upper() in ["FP1", "1"] and "Practice" not in session: norm_session = "Free Practice 1"
         elif session.upper() in ["FP2", "2"] and "Practice" not in session: norm_session = "Free Practice 2"
         elif session.upper() in ["FP3", "3"] and "Practice" not in session: norm_session = "Free Practice 3"
@@ -140,11 +133,10 @@ def get_options():
         if norm_session not in options[year][event_name]: 
             options[year][event_name].append(norm_session)
             
-    # 保底機制
     if not options:
         options = {
             "2024": {
-                "Bahrain Grand Prix": ["Free Practice 1", "Free Practice 2", "Free Practice 3", "Qualifying", "Race"]
+                "Bahrain Grand Prix": ["Free Practice 1", "Free Practice 2", "Free Practice 3", "Qualifying", "Sprint", "Race"]
             }
         }
     return options
