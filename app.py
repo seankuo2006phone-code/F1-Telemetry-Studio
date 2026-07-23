@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from huggingface_hub import list_repo_files
-import numpy as np
 
 # =========================================================
 # CONFIG & 完美還原 F1 官方視覺與無邊框 CSS
@@ -47,22 +46,22 @@ header::before {
 h1 a, h2 a, h3 a, h4 a, h5 a, h6 a { display: none !important; }
 
 /* ---------------------------------------------------
-   極致無邊框選單 (深層覆蓋 Streamlit 預設樣式)
+   極致無邊框選單：強制把 Streamlit 的選擇框背景徹底挖空
 --------------------------------------------------- */
-div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+div[data-baseweb="select"] > div, 
+div[data-baseweb="select"] > div:hover, 
+div[data-baseweb="select"] > div:focus-within {
     background-color: transparent !important;
-    border: none !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
-    border-radius: 0px !important;
+    border-top: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 0 !important;
     box-shadow: none !important;
 }
-div[data-testid="stSelectbox"] div[data-baseweb="select"]:hover {
-    border-bottom: 1px solid #e10600 !important;
-}
-div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
-    background-color: transparent !important;
-    color: #FFFFFF !important;
-}
+div[data-baseweb="select"] span { color: #ffffff !important; }
+div[data-baseweb="select"] svg { fill: #ffffff !important; }
+
 div[data-testid="stSelectbox"] label p {
     color: #6b7280 !important;
     font-size: 10px !important;
@@ -152,7 +151,7 @@ def load_telemetry(filename: str) -> pd.DataFrame:
         df_loaded = pd.read_parquet(path)
         rename_map = {}
         for col in df_loaded.columns:
-            cl = col.strip().lower()
+            cl = str(col).strip().lower()
             if cl == 'distance': rename_map[col] = 'Distance'
             elif cl == 'speed': rename_map[col] = 'Speed'
             elif cl == 'throttle': rename_map[col] = 'Throttle'
@@ -162,6 +161,7 @@ def load_telemetry(filename: str) -> pd.DataFrame:
             elif cl == 'team': rename_map[col] = 'Team'
             elif cl == 'x': rename_map[col] = 'X'
             elif cl == 'y': rename_map[col] = 'Y'
+            elif cl == 'time': rename_map[col] = 'Time'
         df_loaded.rename(columns=rename_map, inplace=True)
         return df_loaded
     except:
@@ -224,7 +224,8 @@ with col_mid:
                 
                 for metric, row, dash in metrics:
                     if metric not in d.columns: continue
-                    y = d[metric].astype("int8") if metric == "Brake" else d[metric]
+                    # 移除了 astype("int8") 解決 NaN 或 Boolean 導致繪圖崩潰的問題
+                    y = d[metric] 
                     fig.add_trace(go.Scattergl(
                         x=x_axis_data, y=y, mode="lines",
                         name=drv if row == 1 else None, showlegend=row == 1,
@@ -236,13 +237,15 @@ with col_mid:
                 height=760, margin=dict(l=35, r=10, t=30, b=10),
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                 showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                hovermode='x unified', font=dict(color="#ffffff")
+                hovermode='x unified', # 保持游標追蹤
+                dragmode=False, # 徹底禁用放大與拖曳功能
+                font=dict(color="#ffffff")
             )
 
             for i in range(1, 5):
-                fig.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)', row=i, col=1, tickfont=dict(size=9, color='#888'))
-                fig.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)', row=i, col=1, tickfont=dict(size=9, color='#888'))
-                # 將子圖標題顏色改為淺灰
+                # 加上垂直追蹤十字線 (Spikelines) 並固定視角 (fixedrange=True)
+                fig.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)', fixedrange=True, showspikes=True, spikemode='across', spikethickness=1, spikecolor='#555', row=i, col=1, tickfont=dict(size=9, color='#888'))
+                fig.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)', fixedrange=True, row=i, col=1, tickfont=dict(size=9, color='#888'))
                 fig.layout.annotations[i-1].update(font=dict(size=12, color="#9ca3af"))
 
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
@@ -250,7 +253,7 @@ with col_mid:
 # ----------------- 區塊 3: 賽道圖 & AI 分析模型 (Right) -----------------
 with col_right:
     with st.container(height=780, border=False):
-        # 賽道圖部分
+        # 賽道圖
         st.markdown('<p style="font-size: 11px; color: #e10600; letter-spacing: 0.15em; font-weight: 700; margin-bottom: -10px;">TRACK MAP</p>', unsafe_allow_html=True)
         if not df.empty and {"X", "Y"}.issubset(df.columns):
             track = df[df.Driver == driver1] if "Driver" in df.columns else df
@@ -274,6 +277,7 @@ with col_right:
                 map_fig.update_layout(
                     height=300, margin=dict(l=0, r=0, t=20, b=0),
                     paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    dragmode=False, # 禁用賽道圖放大
                     xaxis=dict(visible=False, scaleanchor='y', scaleratio=1, fixedrange=True),
                     yaxis=dict(visible=False, fixedrange=True), showlegend=False
                 )
@@ -283,7 +287,7 @@ with col_right:
 
         st.markdown("<hr style='border-color: rgba(255,255,255,0.1); margin: 15px 0;'>", unsafe_allow_html=True)
 
-        # AI 分析模型部分
+        # AI 分析模型
         st.markdown('<p style="font-size: 11px; color: #e10600; letter-spacing: 0.15em; font-weight: 700; margin-bottom: 10px;">AI TELEMETRY ANALYSIS 🤖</p>', unsafe_allow_html=True)
         if not df.empty and "Speed" in df.columns:
             d1_data = df[df.Driver == driver1]
@@ -306,7 +310,7 @@ with col_right:
                     <li>{driver1} Top Speed: <span style="color: white; font-weight: bold;">{top_speed_1:.0f} km/h</span></li>
                     <li>{driver2} Top Speed: <span style="color: white; font-weight: bold;">{top_speed_2:.0f} km/h</span></li>
                 </ul>
-                <p style="font-size: 12px; color: #777; margin-top: 10px;">* Throttle application patterns indicate differing aero setups or ERS deployment strategies in Sector 2.</p>
+                <p style="font-size: 12px; color: #777; margin-top: 10px;">* Throttle application patterns indicate differing aero setups or ERS deployment strategies.</p>
             </div>
             """, unsafe_allow_html=True)
         else:
