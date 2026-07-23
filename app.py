@@ -149,7 +149,7 @@ def load_telemetry(filename: str) -> pd.DataFrame:
     path = f"hf://datasets/{REPO_ID}/{filename}"
     try:
         df_loaded = pd.read_parquet(path)
-        # 強制將所有欄位名稱標準化為首字母大寫，確保 Distance、Speed 等欄位100%抓得到
+        # 自動防呆：將欄位名稱標準化為首字母大寫，確保 Distance、Speed 等欄位正確
         df_loaded.columns = [
             col.strip().capitalize() if col.strip().lower() in ['distance', 'speed', 'throttle', 'brake', 'rpm', 'driver', 'team', 'x', 'y', 'drs', 'sector'] else col 
             for col in df_loaded.columns
@@ -223,7 +223,7 @@ with main_col:
 
         fig.update_layout(
             height=720, margin=dict(l=35, r=10, t=10, b=10),
-            paper_bgcolor='transparent', plot_bgcolor='transparent',
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             showlegend=False, hovermode='x unified'
         )
 
@@ -257,7 +257,7 @@ with map_col:
 
             map_fig.update_layout(
                 height=520, margin=dict(l=10, r=10, t=10, b=10),
-                paper_bgcolor='transparent', plot_bgcolor='transparent',
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                 xaxis=dict(visible=False, scaleanchor='y', scaleratio=1, fixedrange=True),
                 yaxis=dict(visible=False, fixedrange=True), showlegend=False
             )
