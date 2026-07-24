@@ -70,84 +70,92 @@ const BASE_PLOT_LAYOUT = {
 
 const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="relative w-11/12 max-w-5xl bg-gray-900 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]">
-        <div className="flex items-center justify-between px-6 py-4 bg-gray-800">
-          <div className="flex items-center space-x-3">
-            <SparklesIcon className="w-6 h-6 text-blue-400" />
-            <h2 className="text-xl font-bold tracking-widest text-white">AI 系統遙測診斷報告</h2>
-            <span className="bg-blue-900/50 text-blue-300 text-xs px-2 py-1 rounded">LIVE SYNC_</span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
+      {/* 全黑、無邊框的主體容器 */}
+      <div className="relative w-11/12 max-w-5xl bg-black text-white flex flex-col h-[85vh] p-8 overflow-y-auto custom-scrollbar">
+        
+        {/* 頂部列：標題與關閉按鈕 */}
+        <div className="flex items-center justify-between pb-6 mb-8 border-b border-white/10">
+          <div className="flex items-center space-x-4">
+            <SparklesIcon className="w-5 h-5 text-gray-400" />
+            <h2 className="text-sm font-mono tracking-[0.3em] uppercase text-gray-200">AI TELEMETRY DIAGNOSTIC REPORT</h2>
+            <span className="bg-white/10 text-gray-300 font-mono text-[10px] px-2 py-0.5 tracking-wider">LIVE SYNC_</span>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <XMarkIcon className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="flex-1 p-6 overflow-y-auto space-y-6 custom-scrollbar text-sm text-gray-300">
-          <div className="p-4 bg-blue-950/40 rounded">
-            <h3 className="text-blue-400 font-bold mb-2 tracking-wider">💡 AI 綜合賽況判讀</h3>
-            <p className="leading-relaxed">
-              根據當前遙測數據，Driver 1 (Verstappen) 在第一計時段 (Sector 1) 具有絕對的低速彎牽引力優勢，平均提早 0.15 秒開油；而 Driver 2 (Leclerc) 則在第三計時段 (Sector 3) 的高速連續彎道中，憑藉較高的最低彎中速度 (Mid-corner speed) 扳回 0.2 秒的劣勢。整體圈速差異主要取決於 Turn 8 的煞車點選擇。
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-4 bg-gray-800 rounded">
-              <h3 className="text-red-400 font-bold mb-4 tracking-wider flex items-center">
-                <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
-                晚煞車極限分析 (Braking Zones)
-              </h3>
-              <ul className="space-y-4">
-                <li className="flex justify-between">
-                  <span>Turn 5 煞車點</span>
-                  <span className="text-white font-mono">VER 晚 5.2m (100% 煞車壓力)</span>
-                </li>
-                <li className="flex justify-between">
-                  <span>Turn 8 減速度</span>
-                  <span className="text-white font-mono">LEC 產生高達 5.1G 減速力</span>
-                </li>
-                <li className="flex justify-between">
-                  <span>Trail Braking 釋放</span>
-                  <span className="text-white font-mono">VER 釋放更平滑，減少前輪鎖死</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="p-4 bg-gray-800 rounded">
-              <h3 className="text-green-400 font-bold mb-4 tracking-wider flex items-center">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                出彎牽引力矩陣 (Traction & Throttle)
-              </h3>
-              <ul className="space-y-4">
-                <li className="flex justify-between">
-                  <span>Turn 7 出彎全油門</span>
-                  <span className="text-white font-mono">VER 提早 0.12s 達到 100% 油門</span>
-                </li>
-                <li className="flex justify-between">
-                  <span>低速彎油門微調</span>
-                  <span className="text-white font-mono">LEC 在 40-60% 區間有輕微修正</span>
-                </li>
-                <li className="flex justify-between">
-                  <span>後輪空轉滑動率推估</span>
-                  <span className="text-white font-mono">VER: 3.2% | LEC: 5.1% (較高耗損)</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="p-4 bg-gray-800 rounded">
-            <h3 className="text-yellow-400 font-bold mb-3 tracking-wider flex items-center">
-              <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
-              動力單元與檔位邏輯 (Gear & RPM)
+        {/* 資訊內容區：全英文、純黑、無卡片框 */}
+        <div className="space-y-8 font-mono text-xs text-gray-300">
+          
+          {/* 綜合判讀 */}
+          <div>
+            <h3 className="text-white font-bold tracking-widest uppercase mb-2 text-[11px] flex items-center">
+              <span className="text-red-600 mr-2">■</span> SESSION PERFORMANCE SUMMARY
             </h3>
-            <p className="leading-relaxed mb-4">
-              在直線加速段 (DRS Zone)，兩人均能在 11,500 RPM 左右進行完美升檔，但 Driver 1 在 Turn 12 選擇降至 3 檔以換取更高轉速的出彎扭力；Driver 2 則維持 4 檔，依靠更圓滑的賽車線減少引擎煞車帶來的動量損失。
+            <p className="leading-relaxed text-gray-400">
+              Based on telemetry data, Driver 1 (VER) demonstrates superior low-speed traction in Sector 1, applying throttle 0.15s earlier. Driver 2 (LEC) claws back 0.2s through higher mid-corner minimum speed in Sector 3's complex sequence. Overall lap delta is heavily dictated by Turn 8 braking execution.
             </p>
-            <div className="w-full bg-gray-700 h-2 rounded-full overflow-hidden">
-              <div className="bg-yellow-400 h-full w-[85%]" title="VER 轉速峰值維持率"></div>
-            </div>
-            <div className="text-right text-xs mt-1 text-gray-500">轉速峰值維持率 (VER 優勢)</div>
           </div>
+
+          {/* 數據分析網格 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-white/10">
+            
+            {/* 煞車極限 */}
+            <div>
+              <h3 className="text-white font-bold tracking-widest uppercase mb-4 text-[11px] flex items-center">
+                <span className="text-red-600 mr-2">■</span> BRAKING ZONES
+              </h3>
+              <ul className="space-y-3 text-gray-400">
+                <li className="flex justify-between border-b border-white/5 pb-2">
+                  <span>Turn 5 Braking Point</span>
+                  <span className="text-white">VER later by 5.2m (100% pressure)</span>
+                </li>
+                <li className="flex justify-between border-b border-white/5 pb-2">
+                  <span>Turn 8 Deceleration</span>
+                  <span className="text-white">LEC peak 5.1G deceleration</span>
+                </li>
+                <li className="flex justify-between pb-2">
+                  <span>Trail Braking Release</span>
+                  <span className="text-white">VER smoother release curve</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* 油門與牽引力 */}
+            <div>
+              <h3 className="text-white font-bold tracking-widest uppercase mb-4 text-[11px] flex items-center">
+                <span className="text-green-500 mr-2">■</span> TRACTION & THROTTLE
+              </h3>
+              <ul className="space-y-3 text-gray-400">
+                <li className="flex justify-between border-b border-white/5 pb-2">
+                  <span>Turn 7 Full Throttle</span>
+                  <span className="text-white">VER reached 100% 0.12s earlier</span>
+                </li>
+                <li className="flex justify-between border-b border-white/5 pb-2">
+                  <span>Low-speed Modulation</span>
+                  <span className="text-white">LEC minor input corrections</span>
+                </li>
+                <li className="flex justify-between pb-2">
+                  <span>Estimated Rear Slip</span>
+                  <span className="text-white">VER: 3.2% | LEC: 5.1%</span>
+                </li>
+              </ul>
+            </div>
+
+          </div>
+
+          {/* 動力與檔位邏輯 */}
+          <div className="pt-4 border-t border-white/10">
+            <h3 className="text-white font-bold tracking-widest uppercase mb-2 text-[11px] flex items-center">
+              <span className="text-yellow-500 mr-2">■</span> POWER UNIT & GEAR LOGIC
+            </h3>
+            <p className="leading-relaxed text-gray-400">
+              In the DRS straight, both drivers execute flawless upshifts near 11,500 RPM. Driver 1 drops to 3rd gear at Turn 12 for maximum exit torque, whereas Driver 2 maintains 4th gear, leveraging momentum and a wider racing line to reduce engine-braking momentum loss.
+            </p>
+          </div>
+
         </div>
       </div>
     </div>
@@ -686,15 +694,15 @@ function App() {
         <aside className="xl:col-span-3 flex flex-col space-y-6 h-full overflow-y-auto pr-4 pb-10 custom-scrollbar">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Year</label>
-            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+            <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
               <select value={store.year} onChange={e => {
                   const newYear = e.target.value;
                   const newEventsObj = store.menuOptions?.[newYear] || FALLBACK_OPTIONS[newYear as keyof typeof FALLBACK_OPTIONS] || {};
                   const firstEvent = Object.keys(newEventsObj)[0] || "Bahrain Grand Prix";
                   const firstSession = newEventsObj[firstEvent]?.[0] || "Q";
                   store.updateParams({ year: newYear, eventName: firstEvent, session: firstSession });
-                }} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                {availableYears.map(y => <option key={y} value={y} className="bg-[#15151e] text-white">{y}</option>)}
+                }} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                {availableYears.map(y => <option key={y} value={y} className="bg-black text-white">{y}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
             </div>
@@ -702,14 +710,14 @@ function App() {
 
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Grand Prix</label>
-            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+            <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
               <select value={store.eventName} onChange={e => {
                   const newEvent = e.target.value;
                   const currentEventsObj = store.menuOptions?.[store.year] || FALLBACK_OPTIONS[store.year as keyof typeof FALLBACK_OPTIONS] || {};
                   const firstSession = currentEventsObj[newEvent]?.[0] || "Q";
                   store.updateParams({ eventName: newEvent, session: firstSession });
-                }} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none truncate">
-                {availableEvents.map(e => <option key={e} value={e} className="bg-[#15151e] text-white">{e}</option>)}
+                }} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none truncate">
+                {availableEvents.map(e => <option key={e} value={e} className="bg-black text-white">{e}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
             </div>
@@ -717,9 +725,9 @@ function App() {
 
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Session</label>
-            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
-              <select value={store.session} onChange={e => store.updateParams({ session: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                {availableSessions.map(s => <option key={s} value={s} className="bg-[#15151e] text-white">{SESSION_MAP[s] || s}</option>)}
+            <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
+              <select value={store.session} onChange={e => store.updateParams({ session: e.target.value })} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                {availableSessions.map(s => <option key={s} value={s} className="bg-black text-white">{SESSION_MAP[s] || s}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
             </div>
@@ -728,9 +736,9 @@ function App() {
           <div className="flex flex-col gap-4 pt-4 border-t border-white/10">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] tracking-[0.2em] uppercase font-bold transition-colors duration-300" style={{ color: color1 }}>DRIVER 1</label>
-              <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
-                <select value={store.driver1} onChange={e => store.updateParams({ driver1: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-[#15151e] text-white">{full}</option>)}
+              <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
+                <select value={store.driver1} onChange={e => store.updateParams({ driver1: e.target.value })} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-black text-white">{full}</option>)}
                 </select>
                 <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
               </div>
@@ -738,9 +746,9 @@ function App() {
 
             <div className="flex flex-col gap-1">
               <label className="text-[10px] tracking-[0.2em] uppercase font-bold transition-colors duration-300" style={{ color: color2 }}>DRIVER 2</label>
-              <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
-                <select value={store.driver2} onChange={e => store.updateParams({ driver2: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-[#15151e] text-white">{full}</option>)}
+              <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
+                <select value={store.driver2} onChange={e => store.updateParams({ driver2: e.target.value })} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-black text-white">{full}</option>)}
                 </select>
                 <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
               </div>
