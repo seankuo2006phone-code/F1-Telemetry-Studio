@@ -71,10 +71,7 @@ const BASE_PLOT_LAYOUT = {
 const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
-      {/* 全黑、無邊框的主體容器 */}
       <div className="relative w-11/12 max-w-5xl bg-black text-white flex flex-col h-[85vh] p-8 overflow-y-auto custom-scrollbar">
-        
-        {/* 頂部列：標題與關閉按鈕 */}
         <div className="flex items-center justify-between pb-6 mb-8 border-b border-white/10">
           <div className="flex items-center space-x-4">
             <SparklesIcon className="w-5 h-5 text-gray-400" />
@@ -86,10 +83,7 @@ const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
           </button>
         </div>
 
-        {/* 資訊內容區：全英文、純黑、無卡片框 */}
         <div className="space-y-8 font-mono text-xs text-gray-300">
-          
-          {/* 綜合判讀 */}
           <div>
             <h3 className="text-white font-bold tracking-widest uppercase mb-2 text-[11px] flex items-center">
               <span className="text-red-600 mr-2">■</span> SESSION PERFORMANCE SUMMARY
@@ -99,10 +93,7 @@ const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
             </p>
           </div>
 
-          {/* 數據分析網格 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-white/10">
-            
-            {/* 煞車極限 */}
             <div>
               <h3 className="text-white font-bold tracking-widest uppercase mb-4 text-[11px] flex items-center">
                 <span className="text-red-600 mr-2">■</span> BRAKING ZONES
@@ -123,7 +114,6 @@ const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
               </ul>
             </div>
 
-            {/* 油門與牽引力 */}
             <div>
               <h3 className="text-white font-bold tracking-widest uppercase mb-4 text-[11px] flex items-center">
                 <span className="text-green-500 mr-2">■</span> TRACTION & THROTTLE
@@ -143,10 +133,8 @@ const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
                 </li>
               </ul>
             </div>
-
           </div>
 
-          {/* 動力與檔位邏輯 */}
           <div className="pt-4 border-t border-white/10">
             <h3 className="text-white font-bold tracking-widest uppercase mb-2 text-[11px] flex items-center">
               <span className="text-yellow-500 mr-2">■</span> POWER UNIT & GEAR LOGIC
@@ -155,7 +143,6 @@ const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
               In the DRS straight, both drivers execute flawless upshifts near 11,500 RPM. Driver 1 drops to 3rd gear at Turn 12 for maximum exit torque, whereas Driver 2 maintains 4th gear, leveraging momentum and a wider racing line to reduce engine-braking momentum loss.
             </p>
           </div>
-
         </div>
       </div>
     </div>
@@ -344,7 +331,7 @@ const DeltaChart = () => {
   ];
 
   return (
-    <div className="relative mb-6 cursor-crosshair shrink-0" onMouseMove={handleMouseMove} onMouseLeave={() => setCursor(null, null)}>
+    <div className="relative mb-6 cursor-crosshair shrink-0 h-full w-full" onMouseMove={handleMouseMove} onMouseLeave={() => setCursor(null, null)}>
       <div className="flex justify-between items-center px-2 mb-0.5 pointer-events-none">
         <h2 className="text-[10px] font-medium tracking-[0.2em] text-gray-500 uppercase">Delta Time (s)</h2>
       </div>
@@ -438,7 +425,7 @@ const TelemetryChart = ({ title, metric, yRange, isBrake = false }: { title: str
 
   return (
     <div 
-      className="relative mb-6 cursor-crosshair shrink-0" 
+      className="relative mb-6 cursor-crosshair shrink-0 h-full w-full" 
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setCursor(null, null)}
     >
@@ -595,9 +582,13 @@ function App() {
 
   const color1 = store.data1 ? getTeamColor(store.data1.Team) : '#3671C6';
   const color2 = store.data2 ? getTeamColor(store.data2.Team) : '#E10600';
+  const data1 = store.data1;
+  const data2 = store.data2;
+  const cursorDist = store.cursorDist;
 
   return (
-    <div className="h-screen overflow-hidden bg-[#000000] text-gray-200 p-4 lg:p-6 font-sans selection:bg-[#E10600] flex flex-col">
+    <div className="min-h-screen xl:h-screen w-screen overflow-x-hidden overflow-y-auto xl:overflow-hidden bg-[#000000] text-gray-200 p-4 lg:p-6 font-sans selection:bg-[#E10600] flex flex-col">
+      {/* 核心修改 1：允許手機版無限滾動 (overflow-y-auto)，電腦版鎖定全螢幕 (xl:overflow-hidden) */}
       
       <header className="-mx-4 lg:-mx-6 -mt-4 lg:-mt-6 mb-6 flex flex-col bg-[#15151e] border-t-[4px] border-[#e10600] shadow-xl shrink-0">
         <div className="flex items-center justify-between px-6 lg:px-10 py-4 border-b border-white/10">
@@ -634,38 +625,38 @@ function App() {
 
             {(() => {
               let aiData = null;
-              if (store.cursorDist !== null && store.data1 && store.data2) {
-                const idx = store.data1.Distance.findIndex(d => d >= store.cursorDist);
+              if (cursorDist !== null && data1 && data2) {
+                const idx = data1.Distance.findIndex(d => d >= cursorDist);
                 if (idx !== -1) {
-                  const speed1 = Number(store.data1.Speed[idx]).toFixed(0);
-                  const thr1 = Number(store.data1.Throttle[idx]).toFixed(0);
-                  const brk1 = store.data1.Brake[idx];
-                  const speed2 = Number(store.data2.Speed[idx]).toFixed(0);
-                  const thr2 = Number(store.data2.Throttle[idx]).toFixed(0);
-                  const brk2 = store.data2.Brake[idx];
+                  const speed1 = Number(data1.Speed[idx]).toFixed(0);
+                  const thr1 = Number(data1.Throttle[idx]).toFixed(0);
+                  const brk1 = data1.Brake[idx];
+                  const speed2 = Number(data2.Speed[idx]).toFixed(0);
+                  const thr2 = Number(data2.Throttle[idx]).toFixed(0);
+                  const brk2 = data2.Brake[idx];
                   const speedDiff = (Number(speed1) - Number(speed2)).toFixed(0);
                   const sign = Number(speed1) > Number(speed2) ? '+' : '';
 
                   let insightStr = '';
-                  if (brk1 > 0 && brk2 === 0) insightStr = `🛑 ${store.data2.Driver} Braking Later!`;
-                  else if (brk1 === 0 && brk2 > 0) insightStr = `🛑 ${store.data1.Driver} Braking Later!`;
-                  else if (Number(thr1) >= 99 && Number(thr2) < 99) insightStr = `🟢 ${store.data1.Driver} Earlier Throttle!`;
-                  else if (Number(thr1) < 99 && Number(thr2) >= 99) insightStr = `🟢 ${store.data2.Driver} Earlier Throttle!`;
-                  else if (Math.abs(Number(speed1) - Number(speed2)) > 3) insightStr = `🚀 ${Number(speed1) > Number(speed2) ? store.data1.Driver : store.data2.Driver} Momentum Advantage`;
+                  if (brk1 > 0 && brk2 === 0) insightStr = `🛑 ${data2.Driver} Braking Later!`;
+                  else if (brk1 === 0 && brk2 > 0) insightStr = `🛑 ${data1.Driver} Braking Later!`;
+                  else if (Number(thr1) >= 99 && Number(thr2) < 99) insightStr = `🟢 ${data1.Driver} Earlier Throttle!`;
+                  else if (Number(thr1) < 99 && Number(thr2) >= 99) insightStr = `🟢 ${data2.Driver} Earlier Throttle!`;
+                  else if (Math.abs(Number(speed1) - Number(speed2)) > 3) insightStr = `🚀 ${Number(speed1) > Number(speed2) ? data1.Driver : data2.Driver} Momentum Advantage`;
                   else insightStr = `⚖️ Matching Pace`;
 
                   aiData = {
-                    d1Name: store.data1.Driver,
-                    d1Color: getTeamColor(store.data1.Team),
+                    d1Name: data1.Driver,
+                    d1Color: getTeamColor(data1.Team),
                     s1: speed1,
                     t1: thr1,
-                    d2Name: store.data2.Driver,
-                    d2Color: getTeamColor(store.data2.Team),
+                    d2Name: data2.Driver,
+                    d2Color: getTeamColor(data2.Team),
                     s2: speed2,
                     t2: thr2,
                     delta: `${sign}${speedDiff} km/h`,
                     insight: insightStr,
-                    dist: store.cursorDist.toFixed(0)
+                    dist: cursorDist.toFixed(0)
                   };
                 }
               }
@@ -689,20 +680,22 @@ function App() {
 
       {isAIModalOpen && <AIAnalysisModal onClose={() => setIsAIModalOpen(false)} />}
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 flex-1 overflow-hidden">
+      {/* 核心修改 2：手機版採用 flex-col 垂直堆疊，電腦版採用 xl:grid 三欄佈局 */}
+      <div className="flex flex-col xl:grid xl:grid-cols-12 gap-8 flex-1 xl:min-h-0 w-full mt-2 xl:mt-0">
         
-        <aside className="xl:col-span-3 flex flex-col space-y-6 h-full overflow-y-auto pr-4 pb-10 custom-scrollbar">
+        {/* 區塊 ①：側邊選單 (已改為無框、純黑、極簡底線風格) */}
+        <aside className="w-full xl:col-span-3 flex flex-col space-y-6 xl:h-full xl:overflow-y-auto pr-0 xl:pr-4 pb-4 xl:pb-10 custom-scrollbar shrink-0">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Year</label>
-            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+            <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
               <select value={store.year} onChange={e => {
                   const newYear = e.target.value;
                   const newEventsObj = store.menuOptions?.[newYear] || FALLBACK_OPTIONS[newYear as keyof typeof FALLBACK_OPTIONS] || {};
                   const firstEvent = Object.keys(newEventsObj)[0] || "Bahrain Grand Prix";
                   const firstSession = newEventsObj[firstEvent]?.[0] || "Q";
                   store.updateParams({ year: newYear, eventName: firstEvent, session: firstSession });
-                }} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                {availableYears.map(y => <option key={y} value={y} className="bg-[#15151e] text-white">{y}</option>)}
+                }} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                {availableYears.map(y => <option key={y} value={y} className="bg-black text-white">{y}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
             </div>
@@ -710,14 +703,14 @@ function App() {
 
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Grand Prix</label>
-            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+            <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
               <select value={store.eventName} onChange={e => {
                   const newEvent = e.target.value;
                   const currentEventsObj = store.menuOptions?.[store.year] || FALLBACK_OPTIONS[store.year as keyof typeof FALLBACK_OPTIONS] || {};
                   const firstSession = currentEventsObj[newEvent]?.[0] || "Q";
                   store.updateParams({ eventName: newEvent, session: firstSession });
-                }} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none truncate">
-                {availableEvents.map(e => <option key={e} value={e} className="bg-[#15151e] text-white">{e}</option>)}
+                }} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none truncate">
+                {availableEvents.map(e => <option key={e} value={e} className="bg-black text-white">{e}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
             </div>
@@ -725,9 +718,9 @@ function App() {
 
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Session</label>
-            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
-              <select value={store.session} onChange={e => store.updateParams({ session: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                {availableSessions.map(s => <option key={s} value={s} className="bg-[#15151e] text-white">{SESSION_MAP[s] || s}</option>)}
+            <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
+              <select value={store.session} onChange={e => store.updateParams({ session: e.target.value })} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                {availableSessions.map(s => <option key={s} value={s} className="bg-black text-white">{SESSION_MAP[s] || s}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
             </div>
@@ -736,9 +729,9 @@ function App() {
           <div className="flex flex-col gap-4 pt-4 border-t border-white/10">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] tracking-[0.2em] uppercase font-bold transition-colors duration-300" style={{ color: color1 }}>DRIVER 1</label>
-              <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
-                <select value={store.driver1} onChange={e => store.updateParams({ driver1: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-[#15151e] text-white">{full}</option>)}
+              <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
+                <select value={store.driver1} onChange={e => store.updateParams({ driver1: e.target.value })} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-black text-white">{full}</option>)}
                 </select>
                 <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
               </div>
@@ -746,9 +739,9 @@ function App() {
 
             <div className="flex flex-col gap-1">
               <label className="text-[10px] tracking-[0.2em] uppercase font-bold transition-colors duration-300" style={{ color: color2 }}>DRIVER 2</label>
-              <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
-                <select value={store.driver2} onChange={e => store.updateParams({ driver2: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-[#15151e] text-white">{full}</option>)}
+              <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
+                <select value={store.driver2} onChange={e => store.updateParams({ driver2: e.target.value })} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-black text-white">{full}</option>)}
                 </select>
                 <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
               </div>
@@ -756,7 +749,8 @@ function App() {
           </div>
         </aside>
 
-        <main className="xl:col-span-5 flex flex-col h-full overflow-y-auto pr-4 pb-20 custom-scrollbar">
+        {/* 區塊 ②：圖表區 (每個圖表加入 h-[250px] shrink-0 強制保護不被擠壓) */}
+        <main className="w-full xl:col-span-5 flex flex-col gap-6 xl:h-full xl:overflow-y-auto pr-0 xl:pr-4 pb-6 xl:pb-20 custom-scrollbar shrink-0">
           {store.loading ? (
              <div className="flex items-center justify-center min-h-[400px]">
                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white/20"></div>
@@ -767,29 +761,18 @@ function App() {
             </div>
           ) : (
             <div className="flex flex-col gap-6 w-full">
-              <div className="min-h-[220px] w-full">
-                <TelemetryChart title="Speed (km/h)" metric="Speed" />
-              </div>
-              <div className="min-h-[220px] w-full">
-                <DeltaChart />
-              </div>
-              <div className="min-h-[220px] w-full">
-                <TelemetryChart title="Engine (RPM)" metric="RPM" />
-              </div>
-              <div className="min-h-[220px] w-full">
-                <TelemetryChart title="Throttle (%)" metric="Throttle" yRange={[-5, 105]} />
-              </div>
-              <div className="min-h-[220px] w-full">
-                <TelemetryChart title="Brake" metric="Brake" yRange={[-0.1, 1.1]} isBrake={true} />
-              </div>
-              <div className="min-h-[220px] w-full">
-                <TelemetryChart title="DRS Status" metric="DRS" yRange={[-1, 15]} />
-              </div>
+              <div className="h-[250px] shrink-0 w-full"><TelemetryChart title="Speed (km/h)" metric="Speed" /></div>
+              <div className="h-[250px] shrink-0 w-full"><DeltaChart /></div>
+              <div className="h-[250px] shrink-0 w-full"><TelemetryChart title="Engine (RPM)" metric="RPM" /></div>
+              <div className="h-[250px] shrink-0 w-full"><TelemetryChart title="Throttle (%)" metric="Throttle" yRange={[-5, 105]} /></div>
+              <div className="h-[250px] shrink-0 w-full"><TelemetryChart title="Brake" metric="Brake" yRange={[-0.1, 1.1]} isBrake={true} /></div>
+              <div className="h-[250px] shrink-0 w-full"><TelemetryChart title="DRS Status" metric="DRS" yRange={[-1, 15]} /></div>
             </div>
           )}
         </main>
 
-        <div className="xl:col-span-4 h-[350px] xl:h-full relative pb-12 xl:pb-0 flex items-center justify-center">
+        {/* 區塊 ③：賽道地圖 (放在最下方，確保足夠的空間呈現) */}
+        <div className="w-full xl:col-span-4 min-h-[400px] xl:min-h-0 xl:h-full relative pb-12 xl:pb-0 shrink-0 flex items-center justify-center">
           <TrackMap />
         </div>
 
