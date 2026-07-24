@@ -597,7 +597,7 @@ function App() {
   const color2 = store.data2 ? getTeamColor(store.data2.Team) : '#E10600';
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#000000] text-gray-200 p-4 lg:p-5 font-sans selection:bg-[#E10600] flex flex-col">
+    <div className="h-screen overflow-hidden bg-[#000000] text-gray-200 p-4 lg:p-6 font-sans selection:bg-[#E10600] flex flex-col">
       
       <header className="-mx-4 lg:-mx-6 -mt-4 lg:-mt-6 mb-6 flex flex-col bg-[#15151e] border-t-[4px] border-[#e10600] shadow-xl shrink-0">
         <div className="flex items-center justify-between px-6 lg:px-10 py-4 border-b border-white/10">
@@ -694,15 +694,15 @@ function App() {
         <aside className="xl:col-span-3 flex flex-col space-y-6 h-full overflow-y-auto pr-4 pb-10 custom-scrollbar">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Year</label>
-            <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
+            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
               <select value={store.year} onChange={e => {
                   const newYear = e.target.value;
                   const newEventsObj = store.menuOptions?.[newYear] || FALLBACK_OPTIONS[newYear as keyof typeof FALLBACK_OPTIONS] || {};
                   const firstEvent = Object.keys(newEventsObj)[0] || "Bahrain Grand Prix";
                   const firstSession = newEventsObj[firstEvent]?.[0] || "Q";
                   store.updateParams({ year: newYear, eventName: firstEvent, session: firstSession });
-                }} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                {availableYears.map(y => <option key={y} value={y} className="bg-black text-white">{y}</option>)}
+                }} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                {availableYears.map(y => <option key={y} value={y} className="bg-[#15151e] text-white">{y}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
             </div>
@@ -710,14 +710,14 @@ function App() {
 
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Grand Prix</label>
-            <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
+            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
               <select value={store.eventName} onChange={e => {
                   const newEvent = e.target.value;
                   const currentEventsObj = store.menuOptions?.[store.year] || FALLBACK_OPTIONS[store.year as keyof typeof FALLBACK_OPTIONS] || {};
                   const firstSession = currentEventsObj[newEvent]?.[0] || "Q";
                   store.updateParams({ eventName: newEvent, session: firstSession });
-                }} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none truncate">
-                {availableEvents.map(e => <option key={e} value={e} className="bg-black text-white">{e}</option>)}
+                }} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none truncate">
+                {availableEvents.map(e => <option key={e} value={e} className="bg-[#15151e] text-white">{e}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
             </div>
@@ -725,9 +725,9 @@ function App() {
 
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Session</label>
-            <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
-              <select value={store.session} onChange={e => store.updateParams({ session: e.target.value })} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                {availableSessions.map(s => <option key={s} value={s} className="bg-black text-white">{SESSION_MAP[s] || s}</option>)}
+            <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+              <select value={store.session} onChange={e => store.updateParams({ session: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                {availableSessions.map(s => <option key={s} value={s} className="bg-[#15151e] text-white">{SESSION_MAP[s] || s}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
             </div>
@@ -736,9 +736,9 @@ function App() {
           <div className="flex flex-col gap-4 pt-4 border-t border-white/10">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] tracking-[0.2em] uppercase font-bold transition-colors duration-300" style={{ color: color1 }}>DRIVER 1</label>
-              <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
-                <select value={store.driver1} onChange={e => store.updateParams({ driver1: e.target.value })} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-black text-white">{full}</option>)}
+              <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+                <select value={store.driver1} onChange={e => store.updateParams({ driver1: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-[#15151e] text-white">{full}</option>)}
                 </select>
                 <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
               </div>
@@ -746,9 +746,9 @@ function App() {
 
             <div className="flex flex-col gap-1">
               <label className="text-[10px] tracking-[0.2em] uppercase font-bold transition-colors duration-300" style={{ color: color2 }}>DRIVER 2</label>
-              <div className="relative flex items-center bg-black border-b border-white/10 hover:border-white/30 transition-colors py-1">
-                <select value={store.driver2} onChange={e => store.updateParams({ driver2: e.target.value })} className="bg-black text-white text-sm w-full p-1 appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
-                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-black text-white">{full}</option>)}
+              <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
+                <select value={store.driver2} onChange={e => store.updateParams({ driver2: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
+                  {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-[#15151e] text-white">{full}</option>)}
                 </select>
                 <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
               </div>
@@ -766,18 +766,30 @@ function App() {
               No Data Available
             </div>
           ) : (
-            <div className="flex flex-col gap-4">
-              <TelemetryChart title="Speed (km/h)" metric="Speed" />
-              <DeltaChart />
-              <TelemetryChart title="Engine (RPM)" metric="RPM" />
-              <TelemetryChart title="Throttle (%)" metric="Throttle" yRange={[-5, 105]} />
-              <TelemetryChart title="Brake" metric="Brake" yRange={[-0.1, 1.1]} isBrake={true} />
-              <TelemetryChart title="DRS Status" metric="DRS" yRange={[-1, 15]} />
+            <div className="flex flex-col gap-6 w-full">
+              <div className="min-h-[220px] w-full">
+                <TelemetryChart title="Speed (km/h)" metric="Speed" />
+              </div>
+              <div className="min-h-[220px] w-full">
+                <DeltaChart />
+              </div>
+              <div className="min-h-[220px] w-full">
+                <TelemetryChart title="Engine (RPM)" metric="RPM" />
+              </div>
+              <div className="min-h-[220px] w-full">
+                <TelemetryChart title="Throttle (%)" metric="Throttle" yRange={[-5, 105]} />
+              </div>
+              <div className="min-h-[220px] w-full">
+                <TelemetryChart title="Brake" metric="Brake" yRange={[-0.1, 1.1]} isBrake={true} />
+              </div>
+              <div className="min-h-[220px] w-full">
+                <TelemetryChart title="DRS Status" metric="DRS" yRange={[-1, 15]} />
+              </div>
             </div>
           )}
         </main>
 
-        <div className="xl:col-span-4 h-full relative">
+        <div className="xl:col-span-4 h-[350px] xl:h-full relative pb-12 xl:pb-0 flex items-center justify-center">
           <TrackMap />
         </div>
 
