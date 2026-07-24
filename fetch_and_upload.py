@@ -1,79 +1,88 @@
 import os
 import time
 import ctypes
+import logging
 import fastf1
 import pandas as pd
 from huggingface_hub import HfApi, list_repo_files
 
-# ⚠️ 注意：如果你剛才有新建一個 Repository (例如結尾加了 -V2)，請記得改這裡！
+# ==========================================
+# 1. 核心參數設定區
+# ==========================================
 REPO_ID = "SeanKuo2006/F1-Telemetry-Data-V2" 
 LOCAL_CACHE_DIR = "./f1_cache"
-LOCAL_DATA_DIR = "./F1 data"
+LOCAL_DATA_DIR = "./F1_data_temp"
+YEARS = range(2018, 2026)
+MAX_LOOPS = 5  # 最多重複掃描 5 輪
 
+# 前端絕對不可或缺的遙測欄位
+COLS_TO_KEEP = ["Driver", "Team", "Distance", "Speed", "Throttle", "Brake", "RPM", "X", "Y", "DRS", "Sector"]
+
+SESSION_MAPPING = {
+    "FP1": "Free Practice 1", "FP2": "Free Practice 2", "FP3": "Free Practice 3",
+    "SQ": "Sprint Shootout", "S": "Sprint", "Q": "Qualifying", "R": "Race"
+}
+
+# 建立必要的資料夾
 os.makedirs(LOCAL_CACHE_DIR, exist_ok=True)
 os.makedirs(LOCAL_DATA_DIR, exist_ok=True)
 fastf1.Cache.enable_cache(LOCAL_CACHE_DIR)
 
-SESSION_MAPPING = {
-    "FP1": "Free Practice 1",
-    "FP2": "Free Practice 2",
-    "FP3": "Free Practice 3",
-    "SQ": "Sprint Shootout",
-    "S": "Sprint",
-    "Q": "Qualifying",
-    "R": "Race"
-}
+# 設定日誌
+logging.basicConfig(filename='f1_upload_log.txt', level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s', encoding='utf-8')
 
-YEARS = range(2018, 2026)
-
-# 確保只保留能畫出遙測圖表的關鍵欄位
-cols_to_keep = [
-    "Driver", "Team", "Distance", "Speed",
-    "Throttle", "Brake", "RPM",
-    "X", "Y", "DRS", "Sector"
-]
-
+# ==========================================
+# 2. 系統與網路防禦機制
+# ==========================================
 def prevent_computer_sleep():
-    """🛡️ 告訴 Windows 保持清醒（防止系統進入睡眠與關閉電源）"""
-    ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)
+    """強制 Windows 保持清醒"""
+    try:
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)
+    except Exception:
+        pass
 
-def rebuild_f1_dataset():
+def get_uploaded_files_with_retry(api):
+    """取得雲端檔案清單（含斷線無限重試機制）"""
+    while True:
+        try:
+            return set(list_repo_files(repo_id=REPO_ID, repo_type="dataset"))
+        except Exception as e:
+            print(f"⚠️ 取得雲端檔案清單失敗，重試中... ({e})")
+            time.sleep(3)
+
+# ==========================================
+# 3. 主程序 (加入自動重複檢查與無間斷機制)
+# ==========================================
+def main():
     api = HfApi()
     token = os.environ.get("HF_TOKEN")
     
-    print("🚀 啟動無情抓取程式（防睡眠 + 真正遙測數據極速版）...")
-
-    while True:
-        # 🛡️ 每次大迴圈開始時，強制重新整理防睡眠狀態，確保筆電不待機
-        prevent_computer_sleep()
+    print("🚀 [全速衝刺版] 啟動！程式將不斷掃描，抓過的會印出提示，且中途不休息。")
+    
+    current_loop = 1
+    
+    while current_loop <= MAX_LOOPS:
+        print(f"\n🔄 ===== 第 {current_loop} 輪全面掃描開始 =====")
+        new_uploads_count = 0
+        existing_files = get_uploaded_files_with_retry(api)
         
-        print("\n🔄 [開始新一輪巡邏] 正在取得雲端現有檔案清單以供自動略過...")
-        try:
-            existing_files = set(list_repo_files(repo_id=REPO_ID, repo_type="dataset"))
-        except Exception as e:
-            print(f"⚠️ 取得雲端檔案清單失敗: {e}，5秒後自動重試...")
-            time.sleep(5)
-            continue
-
-        uploaded_in_this_pass = 0
-
         for year in YEARS:
-            print(f"\n================ 正在處理 {year} 年賽季 ================")
-            time.sleep(1)
+            prevent_computer_sleep()
+            print(f"\n👉 正在檢查 {year} 年賽季...")
             
             try:
                 schedule = fastf1.get_event_schedule(year)
             except Exception as e:
-                print(f"⚠️ 無法取得 {year} 年行事曆: {e}，略過此年份。")
+                logging.error(f"無法取得 {year} 年行事曆: {e}")
                 continue
 
             for _, event in schedule.iterrows():
                 event_name = event['EventName']
-                # 排除測試賽季或無效賽事
                 if "Testing" in event_name or "Pre-Season" in event_name or event['RoundNumber'] == 0:
                     continue
                 
-                safe_event_name = event_name.replace(" ", "_")
+                safe_event_name = str(event_name).replace(" ", "_").replace("/", "_")
                 round_number = event['RoundNumber']
                 
                 for code, full_name in SESSION_MAPPING.items():
@@ -82,29 +91,37 @@ def rebuild_f1_dataset():
                     filepath = os.path.join(LOCAL_DATA_DIR, filename)
                     
                     if filename in existing_files:
-                        # 已經有了就無情跳過，不印廢話浪費效能
+                        print(f"⏩ {filename} 已經上傳hugging face")
                         continue
-
+                        
+                    print(f"⏳ 發現缺漏，正在補抓: {filename}")
+                    
                     try:
                         session = fastf1.get_session(year, round_number, code)
-                        session.load(telemetry=True, weather=False, messages=False)
-                        
-                        # ==========================================
-                        # 核心修復區：抓取真正的遙測數據，而不是 Laps！
-                        # ==========================================
+                        try:
+                            session.load(telemetry=True, weather=False, messages=False)
+                        except Exception as load_e:
+                            logging.warning(f"略過 {filename}: 官方資料庫缺漏 ({load_e})")
+                            continue
+
                         all_telemetry = []
+                        
+                        # 單一車手防呆
                         for driver in session.drivers:
                             try:
                                 laps = session.laps.pick_driver(driver)
                                 if len(laps) == 0: continue
-                                fastest_lap = laps.pick_fastest()
-                                telemetry = fastest_lap.get_telemetry()
                                 
-                                # 轉換車手代號為 3 字母縮寫
-                                telemetry['Driver'] = session.get_driver(driver)['Abbreviation']
+                                fastest_lap = laps.pick_fastest()
+                                if pd.isna(fastest_lap.get('LapTime')): continue
+                                
+                                telemetry = fastest_lap.get_telemetry()
+                                if telemetry.empty: continue
+                                
+                                dr_info = session.get_driver(driver)
+                                telemetry['Driver'] = dr_info.get('Abbreviation', driver)
                                 telemetry['Team'] = fastest_lap['Team']
                                 
-                                # 計算賽道區段
                                 max_dist = telemetry['Distance'].max()
                                 if max_dist > 0:
                                     norm_dist = telemetry['Distance'] / max_dist
@@ -113,48 +130,51 @@ def rebuild_f1_dataset():
                                     telemetry['Sector'] = 1
                                     
                                 all_telemetry.append(telemetry)
-                            except Exception:
-                                pass
+                            except Exception as driver_e:
+                                continue 
                         
-                        if len(all_telemetry) == 0:
+                        if not all_telemetry:
                             continue
                             
-                        # 合併所有車手資料並篩選欄位
                         df_to_save = pd.concat(all_telemetry, ignore_index=True)
-                        existing_cols = [c for c in cols_to_keep if c in df_to_save.columns]
+                        existing_cols = [c for c in COLS_TO_KEEP if c in df_to_save.columns]
                         df_to_save = df_to_save[existing_cols]
-                        # ==========================================
                         
-                        # 存檔並上傳
                         df_to_save.to_parquet(filepath, index=False)
                         
-                        api.upload_file(
-                            path_or_fileobj=filepath,
-                            path_in_repo=filename,
-                            repo_id=REPO_ID,
-                            repo_type="dataset",
-                            token=token
-                        )
-                        print(f"✅ [成功上傳] {filename}")
-                        
-                        existing_files.add(filename)
-                        uploaded_in_this_pass += 1
-                        
+                        for attempt in range(3):
+                            try:
+                                api.upload_file(
+                                    path_or_fileobj=filepath,
+                                    path_in_repo=filename,
+                                    repo_id=REPO_ID,
+                                    repo_type="dataset",
+                                    token=token
+                                )
+                                existing_files.add(filename)
+                                print(f"✅ 成功補齊並上傳: {filename}")
+                                new_uploads_count += 1
+                                break
+                            except Exception as upload_e:
+                                if attempt == 2:
+                                    logging.error(f"上傳失敗 {filename}: {upload_e}")
+                                time.sleep(3)
+                                
                         if os.path.exists(filepath):
                             os.remove(filepath)
                             
-                    except Exception as e:
-                        # 💥 遇到任何錯誤都只印出警告，直接硬幹下一個檔案
-                        print(f"⚠️ 傳輸 {filename} 時發生錯誤: {e}，無視警告直接進入下一個！")
+                    except Exception as global_e:
+                        logging.error(f"徹底崩潰 {filename}: {global_e}")
                         continue
-
-        # 如果真的完全沒有任何新檔案要上傳，才代表 100% 完工
-        if uploaded_in_this_pass == 0:
-            print("\n🎉 太棒了！所有年份與賽事皆已 100% 確認上傳完畢，自動結束程式！")
+        
+        # 檢查這一輪有沒有抓到新東西
+        if new_uploads_count == 0:
+            print("\n🎉 [任務徹底完成] 連續一整輪都沒有新檔案可抓，所有資料都已 100% 補齊！")
             break
         else:
-            print(f"\n🔄 本輪共補充上傳了 {uploaded_in_this_pass} 個檔案，繼續進行下一輪巡邏...")
-            time.sleep(3)
+            print(f"\n⚠️ 第 {current_loop} 輪結束，總共補齊了 {new_uploads_count} 份缺失資料。")
+            print("⚡ 立即展開下一輪掃描...")
+            current_loop += 1
 
 if __name__ == "__main__":
-    rebuild_f1_dataset()
+    main()

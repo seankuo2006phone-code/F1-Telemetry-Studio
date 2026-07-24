@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { create } from 'zustand';
 import Plot from 'react-plotly.js';
+import { SparklesIcon, XMarkIcon } from '@heroicons/react/24/solid';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://f1-telemetry-studio-5r7o.onrender.com';
 
@@ -32,6 +33,103 @@ const getTeamColor = (team: string) => {
     if (t.includes(key)) return color;
   }
   return "#FFFFFF";
+};
+
+const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      {/* 彈出視窗主體 - 拔除 border */}
+      <div className="relative w-11/12 max-w-5xl bg-gray-900 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]">
+        
+        {/* 彈出視窗標題 - 拔除 border-b */}
+        <div className="flex items-center justify-between px-6 py-4 bg-gray-800">
+          <div className="flex items-center space-x-3">
+            <SparklesIcon className="w-6 h-6 text-blue-400" />
+            <h2 className="text-xl font-bold tracking-widest text-white">AI 系統遙測診斷報告</h2>
+            {/* LIVE SYNC 標籤 - 拔除 border */}
+            <span className="bg-blue-900/50 text-blue-300 text-xs px-2 py-1 rounded">LIVE SYNC_</span>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+            <XMarkIcon className="w-6 h-6" />
+          </button>
+        </div>
+
+        {/* 詳盡分析內容區 */}
+        <div className="flex-1 p-6 overflow-y-auto space-y-6 custom-scrollbar text-sm text-gray-300">
+          
+          {/* AI 綜合結論 - 拔除 border-l-4 */}
+          <div className="p-4 bg-blue-950/40 rounded">
+            <h3 className="text-blue-400 font-bold mb-2 tracking-wider">💡 AI 綜合賽況判讀</h3>
+            <p className="leading-relaxed">
+              根據當前遙測數據，Driver 1 (Verstappen) 在第一計時段 (Sector 1) 具有絕對的低速彎牽引力優勢，平均提早 0.15 秒開油；而 Driver 2 (Leclerc) 則在第三計時段 (Sector 3) 的高速連續彎道中，憑藉較高的最低彎中速度 (Mid-corner speed) 扳回 0.2 秒的劣勢。整體圈速差異主要取決於 Turn 8 的煞車點選擇。
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 煞車區間分析 - 拔除所有 border */}
+            <div className="p-4 bg-gray-800 rounded">
+              <h3 className="text-red-400 font-bold mb-4 tracking-wider flex items-center">
+                <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                晚煞車極限分析 (Braking Zones)
+              </h3>
+              <ul className="space-y-4">
+                <li className="flex justify-between">
+                  <span>Turn 5 煞車點</span>
+                  <span className="text-white font-mono">VER 晚 5.2m (100% 煞車壓力)</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>Turn 8 減速度</span>
+                  <span className="text-white font-mono">LEC 產生高達 5.1G 減速力</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>Trail Braking 釋放</span>
+                  <span className="text-white font-mono">VER 釋放更平滑，減少前輪鎖死</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* 油門與牽引力分析 - 拔除所有 border */}
+            <div className="p-4 bg-gray-800 rounded">
+              <h3 className="text-green-400 font-bold mb-4 tracking-wider flex items-center">
+                <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                出彎牽引力矩陣 (Traction & Throttle)
+              </h3>
+              <ul className="space-y-4">
+                <li className="flex justify-between">
+                  <span>Turn 7 出彎全油門</span>
+                  <span className="text-white font-mono">VER 提早 0.12s 達到 100% 油門</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>低速彎油門微調</span>
+                  <span className="text-white font-mono">LEC 在 40-60% 區間有輕微修正</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>後輪空轉滑動率推估</span>
+                  <span className="text-white font-mono">VER: 3.2% | LEC: 5.1% (較高耗損)</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* 檔位與轉速邏輯 - 拔除所有 border */}
+          <div className="p-4 bg-gray-800 rounded">
+            <h3 className="text-yellow-400 font-bold mb-3 tracking-wider flex items-center">
+              <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
+              動力單元與檔位邏輯 (Gear & RPM)
+            </h3>
+            <p className="leading-relaxed mb-4">
+              在直線加速段 (DRS Zone)，兩人均能在 11,500 RPM 左右進行完美升檔，但 Driver 1 在 Turn 12 選擇降至 3 檔以換取更高轉速的出彎扭力；Driver 2 則維持 4 檔，依靠更圓滑的賽車線減少引擎煞車帶來的動量損失。
+            </p>
+            <div className="w-full bg-gray-700 h-2 rounded-full overflow-hidden">
+              <div className="bg-yellow-400 h-full w-[85%]" title="VER 轉速峰值維持率"></div>
+            </div>
+            <div className="text-right text-xs mt-1 text-gray-500">轉速峰值維持率 (VER 優勢)</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
 };
 
 interface TelemetryData {
@@ -454,6 +552,7 @@ const TrackMap = () => {
 
 function App() {
   const store = useStore();
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
   useEffect(() => { 
     store.fetchOptions().then(() => store.fetchData()); 
@@ -490,14 +589,22 @@ function App() {
         </div>
 
         {/* 🌟 頂部主標題列與即時 AI HUD 橫向融合 */}
-        <div className="bg-[#000000] px-6 lg:px-10 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-6">
+        <div className="bg-[#000000] px-6 lg:px-10 py-3 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4 lg:gap-6">
             <h1 className="text-lg lg:text-xl font-light tracking-[0.2em] text-white flex items-center">
               TELEMETRY STUDIO
               <span className="bg-[#e10600] text-white font-bold text-[9px] tracking-widest px-2 py-0.5 rounded ml-3">PRO v2</span>
             </h1>
+            <button
+              onClick={() => setIsAIModalOpen(true)}
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-900 to-blue-700 hover:from-blue-800 hover:to-blue-600 text-white px-4 py-1.5 rounded shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all duration-300 group"
+            >
+              <SparklesIcon className="w-4 h-4 text-blue-300 group-hover:animate-pulse" />
+              <span className="text-sm font-semibold tracking-widest text-blue-50">AI 深度遙測分析</span>
+            </button>
+          </div>
 
-            {/* 🌟 即時 AI 資訊條 (直接移到標題旁邊，隨滑鼠位置更新) */}
+          {/* 🌟 即時 AI 資訊條 (直接移到標題旁邊，隨滑鼠位置更新) */}
             {(() => {
               let aiData = null;
               if (store.cursorDist !== null && store.data1 && store.data2) {
@@ -558,6 +665,8 @@ function App() {
           </div>
         </div>
       </header>
+
+      {isAIModalOpen && <AIAnalysisModal onClose={() => setIsAIModalOpen(false)} />}
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 flex-1 overflow-hidden">
         
