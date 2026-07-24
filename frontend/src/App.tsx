@@ -71,15 +71,11 @@ const BASE_PLOT_LAYOUT = {
 const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      {/* 彈出視窗主體 - 拔除 border */}
       <div className="relative w-11/12 max-w-5xl bg-gray-900 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[85vh]">
-        
-        {/* 彈出視窗標題 - 拔除 border-b */}
         <div className="flex items-center justify-between px-6 py-4 bg-gray-800">
           <div className="flex items-center space-x-3">
             <SparklesIcon className="w-6 h-6 text-blue-400" />
             <h2 className="text-xl font-bold tracking-widest text-white">AI 系統遙測診斷報告</h2>
-            {/* LIVE SYNC 標籤 - 拔除 border */}
             <span className="bg-blue-900/50 text-blue-300 text-xs px-2 py-1 rounded">LIVE SYNC_</span>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
@@ -87,10 +83,7 @@ const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
           </button>
         </div>
 
-        {/* 詳盡分析內容區 */}
         <div className="flex-1 p-6 overflow-y-auto space-y-6 custom-scrollbar text-sm text-gray-300">
-          
-          {/* AI 綜合結論 - 拔除 border-l-4 */}
           <div className="p-4 bg-blue-950/40 rounded">
             <h3 className="text-blue-400 font-bold mb-2 tracking-wider">💡 AI 綜合賽況判讀</h3>
             <p className="leading-relaxed">
@@ -99,7 +92,6 @@ const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 煞車區間分析 - 拔除所有 border */}
             <div className="p-4 bg-gray-800 rounded">
               <h3 className="text-red-400 font-bold mb-4 tracking-wider flex items-center">
                 <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
@@ -121,7 +113,6 @@ const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
               </ul>
             </div>
 
-            {/* 油門與牽引力分析 - 拔除所有 border */}
             <div className="p-4 bg-gray-800 rounded">
               <h3 className="text-green-400 font-bold mb-4 tracking-wider flex items-center">
                 <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
@@ -144,7 +135,6 @@ const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
             </div>
           </div>
 
-          {/* 檔位與轉速邏輯 - 拔除所有 border */}
           <div className="p-4 bg-gray-800 rounded">
             <h3 className="text-yellow-400 font-bold mb-3 tracking-wider flex items-center">
               <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
@@ -158,7 +148,6 @@ const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
             </div>
             <div className="text-right text-xs mt-1 text-gray-500">轉速峰值維持率 (VER 優勢)</div>
           </div>
-
         </div>
       </div>
     </div>
@@ -252,7 +241,6 @@ const DeltaChart = () => {
   const { data1, data2, cursorDist, cursorRatio, setCursor } = useStore();
   
   const deltaData = useMemo(() => {
-    // 🌟 嚴格檢查：如果資料不完整或缺少 Distance / Speed，直接回傳 null 避免崩潰
     if (!data1 || !data2 || !data1.Distance || !data1.Speed || !data2.Distance || !data2.Speed) return null;
     
     const calcTimeArray = (dist: number[], speedKmh: number[]) => {
@@ -592,7 +580,6 @@ function App() {
     store.fetchOptions().then(() => store.fetchData()); 
   }, []);
 
-  // 🌟 已加上嚴格的型別斷言 (keyof typeof FALLBACK_OPTIONS)，徹底消除 TypeScript 紅字
   const availableYears = store.menuOptions ? Object.keys(store.menuOptions).sort((a, b) => Number(b) - Number(a)) : Object.keys(FALLBACK_OPTIONS);
   const eventsObj = (store.menuOptions && store.menuOptions[store.year]) || FALLBACK_OPTIONS[store.year as keyof typeof FALLBACK_OPTIONS] || {};
   const availableEvents = Object.keys(eventsObj).sort();
@@ -622,7 +609,6 @@ function App() {
           </div>
         </div>
 
-        {/* 🌟 頂部主標題列與即時 AI HUD 橫向融合 */}
         <div className="bg-[#000000] px-6 lg:px-10 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-4 lg:gap-6">
             <h1 className="text-lg lg:text-xl font-light tracking-[0.2em] text-white flex items-center">
@@ -638,7 +624,6 @@ function App() {
             </button>
           </div>
 
-          {/* 🌟 即時 AI 資訊條 (直接移到標題旁邊，隨滑鼠位置更新) */}
             {(() => {
               let aiData = null;
               if (store.cursorDist !== null && store.data1 && store.data2) {
@@ -692,12 +677,6 @@ function App() {
               );
             })()}
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-gray-500 font-mono tracking-widest">LIVE SYNC</span>
-            <span className="w-2 h-2 bg-[#e10600] rounded-full animate-pulse shadow-[0_0_8px_#e10600]"></span>
-          </div>
-        </div>
       </header>
 
       {isAIModalOpen && <AIAnalysisModal onClose={() => setIsAIModalOpen(false)} />}
