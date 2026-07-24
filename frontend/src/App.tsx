@@ -625,10 +625,10 @@ function App() {
             </h1>
             <button
               onClick={() => setIsAIModalOpen(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-blue-900 to-blue-700 hover:from-blue-800 hover:to-blue-600 text-white px-4 py-1.5 rounded shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all duration-300 group"
+              className="flex items-center gap-2 bg-black text-white border border-white/10 hover:border-white/30 px-3 py-1.5 rounded-none font-mono text-xs tracking-widest transition-all duration-300 group"
             >
-              <SparklesIcon className="w-4 h-4 text-blue-300 group-hover:animate-pulse" />
-              <span className="text-sm font-semibold tracking-widest text-blue-50">AI 深度遙測分析</span>
+              <SparklesIcon className="w-4 h-4 text-gray-400 group-hover:text-white" />
+              <span>AI TELEMETRY ANALYSIS</span>
             </button>
           </div>
 
