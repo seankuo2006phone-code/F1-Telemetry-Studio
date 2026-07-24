@@ -597,7 +597,7 @@ function App() {
   const color2 = store.data2 ? getTeamColor(store.data2.Team) : '#E10600';
 
   return (
-    <div className="h-[111.11vh] w-[111.11vw] transform scale-90 origin-top-left overflow-hidden bg-[#000000] text-gray-200 p-4 lg:p-6 font-sans selection:bg-[#E10600] flex flex-col">
+    <div className="h-screen w-screen overflow-hidden bg-[#000000] text-gray-200 p-4 lg:p-5 font-sans selection:bg-[#E10600] flex flex-col">
       
       <header className="-mx-4 lg:-mx-6 -mt-4 lg:-mt-6 mb-6 flex flex-col bg-[#15151e] border-t-[4px] border-[#e10600] shadow-xl shrink-0">
         <div className="flex items-center justify-between px-6 lg:px-10 py-4 border-b border-white/10">
@@ -625,10 +625,10 @@ function App() {
             </h1>
             <button
               onClick={() => setIsAIModalOpen(true)}
-              className="flex items-center gap-2 bg-black text-white border border-white/10 hover:border-white/30 px-3 py-1.5 rounded-none font-mono text-xs tracking-widest transition-all duration-300 group"
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-900 to-blue-700 hover:from-blue-800 hover:to-blue-600 text-white px-4 py-1.5 rounded shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all duration-300 group"
             >
-              <SparklesIcon className="w-4 h-4 text-gray-400 group-hover:text-white" />
-              <span>AI TELEMETRY ANALYSIS</span>
+              <SparklesIcon className="w-4 h-4 text-blue-300 group-hover:animate-pulse" />
+              <span className="text-sm font-semibold tracking-widest text-blue-50">AI 深度遙測分析</span>
             </button>
           </div>
 
