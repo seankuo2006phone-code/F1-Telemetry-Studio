@@ -25,20 +25,23 @@ body {
   background-color: #15151e;
 }
 
-/* 隱藏所有滾動條，打造無邊界的極致懸浮感 */
-.custom-scrollbar::-webkit-scrollbar {
-  display: none;
+/* 強制修改下拉選單與全域的滾動條樣式 */
+::-webkit-scrollbar {
+  width: 6px;
 }
-.custom-scrollbar {
-  overflow: auto;
-  -ms-overflow-style: none;  /* IE / Edge */
-  scrollbar-width: none;  /* Firefox */
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4B5563;
 }
 
-.custom-scrollbar::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
+.custom-scrollbar {
+  overflow: auto;
 }
 
 /* 2. 左側面板 (選單) & 右側面板 (賽道與AI) */

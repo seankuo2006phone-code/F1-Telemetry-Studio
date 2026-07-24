@@ -35,6 +35,39 @@ const getTeamColor = (team: string) => {
   return "#FFFFFF";
 };
 
+const PLOT_CONFIG = {
+  displayModeBar: false,
+  scrollZoom: false,
+  responsive: true,
+};
+
+const BASE_PLOT_LAYOUT = {
+  hovermode: 'x unified',
+  dragmode: false,
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: 'transparent',
+  font: { color: '#9CA3AF' },
+  margin: { l: 40, r: 20, t: 20, b: 40 },
+  xaxis: {
+    fixedrange: true,
+    showgrid: true,
+    gridcolor: '#374151',
+    showspikes: true,
+    spikemode: 'across',
+    spikedash: 'solid',
+    spikecolor: '#6b7280',
+    spikethickness: 1
+  },
+  yaxis: {
+    fixedrange: true,
+    showgrid: true,
+    gridcolor: '#121212',
+    zeroline: false,
+    showline: false,
+    tickfont: { color: '#666', size: 10 }
+  }
+};
+
 const AIAnalysisModal = ({ onClose }: { onClose: () => void }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
@@ -332,17 +365,18 @@ const DeltaChart = () => {
       <Plot
         data={chartData}
         layout={{
-          height: 200, margin: { l: 35, r: 10, t: 5, b: 15 },
-          paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-          xaxis: { showgrid: true, gridcolor: '#121212', zeroline: false, showline: false, tickfont: { color: '#666', size: 10 } },
-          yaxis: { showgrid: true, gridcolor: '#121212', zeroline: true, zerolinecolor: '#444', showline: false, tickfont: { color: '#666', size: 10 } },
-          hovermode: false, showlegend: false,
+          ...BASE_PLOT_LAYOUT,
+          height: 200,
+          margin: { l: 35, r: 10, t: 5, b: 15 },
+          xaxis: { ...BASE_PLOT_LAYOUT.xaxis, gridcolor: '#121212', zeroline: false, showline: false, tickfont: { color: '#666', size: 10 } },
+          yaxis: { ...BASE_PLOT_LAYOUT.yaxis, zeroline: true, zerolinecolor: '#444', showline: false, tickfont: { color: '#666', size: 10 } },
+          showlegend: false,
           shapes: cursorDist !== null ? [{ 
             type: 'line', x0: cursorDist, x1: cursorDist, y0: 0, y1: 1, yref: 'paper', 
             line: { color: '#E10600', width: 1, dash: 'dash' }
           }] : []
         }}
-        config={{ displayModeBar: false, staticPlot: true }} style={{ width: '100%' }}
+        config={PLOT_CONFIG} style={{ width: '100%' }}
       />
     </div>
   );
@@ -438,18 +472,18 @@ const TelemetryChart = ({ title, metric, yRange, isBrake = false }: { title: str
       <Plot
         data={chartData}
         layout={{
-          height: 200, margin: { l: 35, r: 10, t: 5, b: 15 },
-          paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-          xaxis: { showgrid: true, gridcolor: '#121212', zeroline: false, showline: false, tickfont: { color: '#666', size: 10 } },
-          yaxis: { showgrid: true, gridcolor: '#121212', zeroline: false, showline: false, tickfont: { color: '#666', size: 10 }, range: yRange },
-          hovermode: false,
+          ...BASE_PLOT_LAYOUT,
+          height: 200,
+          margin: { l: 35, r: 10, t: 5, b: 15 },
+          xaxis: { ...BASE_PLOT_LAYOUT.xaxis, gridcolor: '#121212', zeroline: false, showline: false, tickfont: { color: '#666', size: 10 } },
+          yaxis: { ...BASE_PLOT_LAYOUT.yaxis, range: yRange },
           showlegend: false,
           shapes: cursorDist !== null ? [{ 
             type: 'line', x0: cursorDist, x1: cursorDist, y0: 0, y1: 1, yref: 'paper', 
             line: { color: '#E10600', width: 1, dash: 'dash' }
           }] : []
         }}
-        config={{ displayModeBar: false, staticPlot: true }} style={{ width: '100%' }}
+        config={PLOT_CONFIG} style={{ width: '100%' }}
       />
     </div>
   );
@@ -680,7 +714,7 @@ function App() {
                   const firstEvent = Object.keys(newEventsObj)[0] || "Bahrain Grand Prix";
                   const firstSession = newEventsObj[firstEvent]?.[0] || "Q";
                   store.updateParams({ year: newYear, eventName: firstEvent, session: firstSession });
-                }} className="bg-transparent text-white font-normal text-sm outline-none cursor-pointer w-full appearance-none pr-6">
+                }} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
                 {availableYears.map(y => <option key={y} value={y} className="bg-[#15151e] text-white">{y}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
@@ -695,7 +729,7 @@ function App() {
                   const currentEventsObj = store.menuOptions?.[store.year] || FALLBACK_OPTIONS[store.year as keyof typeof FALLBACK_OPTIONS] || {};
                   const firstSession = currentEventsObj[newEvent]?.[0] || "Q";
                   store.updateParams({ eventName: newEvent, session: firstSession });
-                }} className="bg-transparent text-white font-normal text-sm outline-none cursor-pointer w-full appearance-none pr-6 truncate">
+                }} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none truncate">
                 {availableEvents.map(e => <option key={e} value={e} className="bg-[#15151e] text-white">{e}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
@@ -705,7 +739,7 @@ function App() {
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-gray-500 tracking-[0.2em] uppercase font-medium">Session</label>
             <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
-              <select value={store.session} onChange={e => store.updateParams({ session: e.target.value })} className="bg-transparent text-white font-normal text-sm outline-none cursor-pointer w-full appearance-none pr-6">
+              <select value={store.session} onChange={e => store.updateParams({ session: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
                 {availableSessions.map(s => <option key={s} value={s} className="bg-[#15151e] text-white">{SESSION_MAP[s] || s}</option>)}
               </select>
               <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
@@ -716,7 +750,7 @@ function App() {
             <div className="flex flex-col gap-1">
               <label className="text-[10px] tracking-[0.2em] uppercase font-bold transition-colors duration-300" style={{ color: color1 }}>DRIVER 1</label>
               <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
-                <select value={store.driver1} onChange={e => store.updateParams({ driver1: e.target.value })} className="bg-transparent text-white font-normal text-sm outline-none cursor-pointer w-full appearance-none pr-6">
+                <select value={store.driver1} onChange={e => store.updateParams({ driver1: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
                   {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-[#15151e] text-white">{full}</option>)}
                 </select>
                 <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
@@ -726,7 +760,7 @@ function App() {
             <div className="flex flex-col gap-1">
               <label className="text-[10px] tracking-[0.2em] uppercase font-bold transition-colors duration-300" style={{ color: color2 }}>DRIVER 2</label>
               <div className="relative flex items-center border-b border-white/10 hover:border-white/30 transition-colors py-1">
-                <select value={store.driver2} onChange={e => store.updateParams({ driver2: e.target.value })} className="bg-transparent text-white font-normal text-sm outline-none cursor-pointer w-full appearance-none pr-6">
+                <select value={store.driver2} onChange={e => store.updateParams({ driver2: e.target.value })} className="bg-gray-900 text-white text-sm w-full p-2 rounded appearance-none border-none outline-none focus:ring-0 cursor-pointer shadow-none">
                   {Object.entries(DRIVER_MAP).map(([abbr, full]) => <option key={abbr} value={abbr} className="bg-[#15151e] text-white">{full}</option>)}
                 </select>
                 <div className="absolute right-0 pointer-events-none text-gray-500 text-[10px]">▼</div>
@@ -751,7 +785,6 @@ function App() {
               <TelemetryChart title="Engine (RPM)" metric="RPM" />
               <TelemetryChart title="Throttle (%)" metric="Throttle" yRange={[-5, 105]} />
               <TelemetryChart title="Brake" metric="Brake" yRange={[-0.1, 1.1]} isBrake={true} />
-              <TelemetryChart title="Gear" metric="nGear" yRange={[0, 9]} />
               <TelemetryChart title="DRS Status" metric="DRS" yRange={[-1, 15]} />
             </div>
           )}
